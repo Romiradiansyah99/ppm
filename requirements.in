@@ -1,0 +1,22 @@
+# Direct dependencies only. Resolved, pinned versions live in requirements.txt
+# (regenerate: pip install -r requirements.in && pip freeze --exclude-editable > requirements.txt).
+#
+# Framework-isolation rule (plan section 9): outside ppm.models / ppm.workflows /
+# ppm.loaders, import neither langchain nor langgraph symbols.
+langgraph
+langgraph-checkpoint-postgres
+langchain-core
+langchain-ollama
+langchain-openai
+psycopg[binary,pool]
+pgvector
+pydantic
+PyYAML
+python-dotenv
+openpyxl
+pdfplumber
+streamlit
+langfuse
+
+# dev
+pytest

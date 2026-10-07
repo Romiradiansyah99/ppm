@@ -1,0 +1,61 @@
+# PPM definition registry - cost plan entity (plan section 3, entity 3).
+# Highest-value entity; Phase 0 model target. A cost plan is a priced
+# breakdown of construction cost for a project at a point in time.
+entity: cost_plan
+table: cost_plan
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: head_qs
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  project_name:      { type: text, required: true, note: "resolved to project_id at ingest" }
+  version:           { type: integer, required: false, note: "assigned by the ingest graph" }
+  stage:             { type: text, required: true }
+  plan_date:         { type: date, required: true }
+  currency:          { type: text, required: false }
+  gfa_m2:            { type: numeric, required: false }
+  area_basis:        { type: text, required: false }
+  total_cost_idr:    { type: bigint, required: false }
+  rate_basis:        { type: text, required: false }
+  elements:          { type: jsonb, required: true }
+  basis_notes:       { type: text, required: false }
+  author:            { type: text, required: false }
+  document_id:       { type: uuid, required: true }
+  document_ref:      { type: text, required: true }
+
+enums:
+  stage:
+    status: GUESS
+    owner: head_qs
+    values: [order-of-magnitude, elemental, detailed, tender, post-tender]
+  currency:
+    status: GUESS
+    values: [IDR]
+  area_basis:
+    status: UNRESOLVED
+    owner: head_qs
+    values: [GFA, NIA, IPMS, unknown]
+    note: "Definition fight 1 (section 3.4). First fight: GFA vs NIA vs IPMS. Rates from differently-based plans are not comparable."
+  rate_basis:
+    status: UNRESOLVED
+    owner: head_qs
+    values: [bare, incl_prelims, all_in, unknown]
+    note: "Definition fight 4 (section 3.4): bare vs incl. preliminaries/OH&P vs all-in."
+
+element:
+  required_fields: [description]
+  optional_fields: [code, qty, unit, rate_idr, amount_idr, spec_level, confidence, source_ref]
+  note: "An element with qty>0 and (rate or amount) can be normalised into a BenchmarkRate."
+
+extraction:
+  # Rules handed to the extraction chain at ingest time.
+  strip_client_identity: true
+  require_source_ref_per_element: true
+  confidence_per_element: true
+
+audit_questions:
+  - "Where do historical cost plans live, who controls the folder? (head QS)"
+  - "How many exist, what formats? (head QS)"

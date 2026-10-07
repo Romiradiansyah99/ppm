@@ -1,0 +1,48 @@
+# PPM definition registry - project entity (plan section 3, entity 1).
+# Every mutating action validates against this file; owners sign before real
+# writes depend on it. status DRAFT_UNVERIFIED means: enum guesses from the
+# plan preamble, replace after the audit questions are answered.
+entity: project
+table: project
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  name:                   { type: text, required: true }
+  global_project_no:      { type: text, required: false, note: "Tier B reference" }
+  client_ref:             { type: text, required: false, note: "Tier B reference only; Client master is Phase 3+" }
+  sector:                 { type: text, required: false }
+  services:               { type: "text[]", required: false }
+  stage:                  { type: text, required: false }
+  start_date:             { type: date, required: false }
+  end_date:               { type: date, required: false }
+  fee_idr:                { type: bigint, required: false, confidential: true }
+  status:                 { type: text, required: false }
+  confidentiality_class:  { type: text, required: false }
+
+enums:
+  sector:
+    status: GUESS
+    owner: head_qs
+    values: [residential, commercial, hospitality, industrial, infrastructure, mixed-use, other]
+  services:
+    status: GUESS
+    owner: operations_lead
+    values: [cost_management, project_management, programme_management, advisory]
+  stage:
+    status: GUESS
+    owner: operations_lead
+    values: [feasibility, concept, design, tender, construction, closeout, defects]
+    note: "Definition fight 2 (section 3.4): fee pipeline vs design stage vs plan-of-work."
+  status:
+    status: GUESS
+    values: [active, won, lost, completed, shelved]
+  confidentiality_class:
+    values: [internal, client_confidential, client_restricted]
+
+audit_questions:
+  - "Where is the definitive active-project list, who maintains it? (office manager / operations lead)"

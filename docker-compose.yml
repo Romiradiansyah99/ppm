@@ -1,0 +1,26 @@
+# Standard deployment path for an office machine.
+# The machine this repo was developed on runs Postgres natively instead -
+# see scripts/dev_pg.ps1 and docs/RUNBOOK.md.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ppm
+      POSTGRES_PASSWORD: ${PPM_DB_PASSWORD:-ppm_dev_password}
+      POSTGRES_DB: ppm
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ppm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ppm -d ppm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Self-hosted observability (optional, plan section 9). Start with:
+  #   set LANGFUSE_HOST=http://localhost:3000 in .env and run `docker compose up -d`
+  # Langfuse v3 requires ClickHouse/Redis/MinIO in production; add its compose
+  # file from https://github.com/langfuse/langfuse when the office box has Docker.
+volumes:
+  ppm_pgdata:

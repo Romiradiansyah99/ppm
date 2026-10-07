@@ -1,0 +1,26 @@
+# The Phase 0 app: rate/benchmark lookup (plan section 4, worked example).
+# Read-only, one entity family, one named user, private search history.
+app: rate-lookup
+version: 1
+user: UNASSIGNED            # plan section 3.5: no name, no start. Set before daily use.
+owner: head_qs
+data_sources: [BenchmarkRate, CostPlan, Document]
+permission_rule: requester.project_silo == rate.source_silo OR rate.client_identifiable == false
+                            # Phase 0 holds office-internal, client-stripped rates, so the
+                            # rule is satisfied by construction; enforcement arrives with
+                            # silos in Phase 3.
+views:
+  - name: search
+    entity: BenchmarkRate
+    fields: [description, element_code, rate_idr, unit, date_normalised_to, sector, spec_level]
+    filters: [sector, spec_level, element_code, date_range]
+    sort: [date_normalised_to desc]
+  - name: detail
+    entity: BenchmarkRate
+    fields: all
+    provenance: [costplan_id, document_id, source_ref]
+actions: []                 # read-only: survives infosec review
+notifications: []
+memory_scope: private       # search history is per-consultant, never shared
+deprecation_condition: no searches in 90 consecutive days
+failsafe: rates without sector or spec_level render flagged "unclassified"

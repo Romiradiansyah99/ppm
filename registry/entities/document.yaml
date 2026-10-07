@@ -1,0 +1,46 @@
+# PPM definition registry - document entity (plan section 3, entity 10).
+# The provenance backbone: every chunk and every derived rate cites a document.
+entity: document
+table: document
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: platform_owner
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  hash:                   { type: text, required: true, note: "sha256 of file bytes" }
+  source_path:            { type: text, required: true }
+  mime:                   { type: text, required: true }
+  project_id:             { type: uuid, required: false }
+  author:                 { type: text, required: false }
+  doc_date:               { type: date, required: false }
+  confidentiality_class:  { type: text, required: false }
+  ingest_status:          { type: text, required: false }
+  licence_class:          { type: text, required: false }
+
+enums:
+  confidentiality_class:
+    values: [internal, client_confidential, client_restricted]
+  ingest_status:
+    values: [indexed, reference_only, forbidden]
+  licence_class:
+    status: GUESS
+    owner: platform_owner
+    values: [permitted, restricted, forbidden]
+    note: "Plan section 13. office-authored deliverables=permitted, client-supplied=restricted, licensed forms=forbidden, indices=restricted, global methodology=restricted, public regs=permitted with citation."
+
+supported_mime:
+  - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  - application/vnd.ms-excel.sheet.macroEnabled.12
+  - application/pdf
+
+redaction:
+  # Phase 0 ingests office-internal cost plans with client identity stripped
+  # (plan section 6, step 3). Extraction is instructed not to emit client
+  # names, and this blocklist is applied as a second, deterministic pass.
+  blocklist_file: data/redaction_blocklist.txt
+
+audit_questions:
+  - "Does any client contract restrict AI processing? (legal/commercial - assume yes until checked)"

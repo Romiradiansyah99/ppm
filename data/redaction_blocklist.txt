@@ -1,0 +1,5 @@
+# Client and employer names that must never reach benchmark data.
+# Applied as the deterministic second pass over extraction output
+# (registry/entities/document.yaml -> redaction.blocklist_file).
+# This file is never published (plan section 17). One name per line.
+PT SYNTHETIC CLIENT

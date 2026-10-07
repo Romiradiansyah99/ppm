@@ -1,0 +1,76 @@
+# PPM definition registry - benchmark rate entity (plan section 3, entity 4).
+# One normalised rate observation derived from a CostPlan. Derived, never
+# hand-entered; single write path: the ingest (normalisation) graph.
+entity: benchmark_rate
+table: benchmark_rate
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: head_qs
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  element_code:         { type: text, required: true }
+  description:          { type: text, required: true }
+  rate_idr:             { type: bigint, required: true }
+  unit:                 { type: text, required: true }
+  date_normalised_to:   { type: date, required: true }
+  location:             { type: text, required: false }
+  sector:               { type: text, required: false }
+  spec_level:           { type: text, required: false }
+  client_identifiable:  { type: boolean, required: false }
+  source_ref:           { type: text, required: true, note: "sheet!row or page/table/row" }
+
+validation:
+  # error -> the rate row is rejected. warn -> the document goes to human
+  # review (or the row is flagged) until the definition fight resolves.
+  require: [description, rate_idr, unit, date_normalised_to, source_ref]
+  warn: [element_code, sector, spec_level, area_basis, rate_basis]
+
+units:
+  status: GUESS
+  owner: head_qs
+  canonical:
+    m2:   [m2, m², sqm, sq.m, sq m, "m2."]
+    m3:   [m3, m³, cum, cu.m, cu m]
+    m:    [m, lm, lin.m, linear m]
+    nr:   [nr, "no", nos, ea, each, unit]
+    sum:  [sum, ls, lump sum, lump-sum, item, provisional]
+    hour: [hour, hr, hours]
+    day:  [day, days]
+    kg:   [kg, kilogram, kilograms]
+    ton:  [ton, tonne, tonnes, t]
+
+enums:
+  spec_level:
+    status: GUESS
+    owner: head_qs
+    values: [low, medium, high]
+    note: "Rows without a spec level render flagged 'unclassified' in the app (failsafe)."
+  sector:
+    status: GUESS
+    owner: head_qs
+    values: [residential, commercial, hospitality, industrial, infrastructure, mixed-use, other, unclassified]
+
+element_codes:
+  status: UNRESOLVED
+  owner: head_qs
+  scheme: null            # SNI | NRM | house-style
+  codes: []               # empty until the head QS signs a list
+  unknown_code_severity: warn
+  note: "Definition fight 3 (section 3.4): benchmarking is impossible until one element-code list exists."
+
+area_basis:
+  status: UNRESOLVED
+  owner: head_qs
+  values: [GFA, NIA, IPMS, unknown]
+
+rate_basis:
+  status: UNRESOLVED
+  owner: head_qs
+  values: [bare, incl_prelims, all_in, unknown]
+
+date_indexation:
+  status: UNRESOLVED
+  base: null              # no indexation basis agreed yet; date_normalised_to = plan date
