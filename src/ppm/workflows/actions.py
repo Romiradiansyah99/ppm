@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, TypedDict
 from uuid import uuid4
 
@@ -49,49 +50,60 @@ class ActionSpec:
     on_reject: dict[str, Any] = field(default_factory=dict)
 
 
+def parse_app_actions(spec: dict, source_name: str, registry: Registry) -> dict[str, ActionSpec]:
+    """Compile one app-spec's action declarations into ActionSpecs."""
+    actions: dict[str, ActionSpec] = {}
+    for raw in spec.get("actions") or []:
+        name = raw.get("name")
+        if not name:
+            raise ActionSpecError(f"{source_name}: action without a name")
+        if name in actions:
+            raise ActionSpecError(f"duplicate action '{name}'")
+        entity = registry.resolve(raw.get("writes_to", ""))
+        if entity is None:
+            raise ActionSpecError(f"{name}: writes_to '{raw.get('writes_to')}' not in the registry")
+        entity_fields = set(registry.entity(entity).get("fields", {}))
+        fields = tuple(raw.get("fields", []))
+        unknown = [f for f in fields if f not in entity_fields]
+        if unknown:
+            raise ActionSpecError(f"{name}: fields not in registry: {unknown}")
+        operation = raw.get("operation", "insert")
+        if operation not in OPERATIONS:
+            raise ActionSpecError(f"{name}: operation must be one of {sorted(OPERATIONS)}")
+        key_field = raw.get("key_field")
+        if operation == "update" and (not key_field or key_field not in fields):
+            raise ActionSpecError(f"{name}: update actions need key_field within fields")
+        gate = raw.get("approval_gate", "none")
+        if gate not in GATES:
+            raise ActionSpecError(f"{name}: approval_gate must be one of {sorted(GATES)}")
+        required = tuple(raw.get("required", []))
+        missing = [r for r in required if r not in fields]
+        if missing:
+            raise ActionSpecError(f"{name}: required fields not in fields: {missing}")
+        actions[name] = ActionSpec(
+            app=str(spec.get("app", source_name)), name=name, entity=entity,
+            table=registry.entity(entity)["table"],
+            operation=operation, key_field=key_field, fields=fields, required=required,
+            gate=gate,
+            on_approve=dict(raw.get("on_approve") or {}),
+            on_reject=dict(raw.get("on_reject") or {}),
+        )
+    return actions
+
+
 def load_actions(registry: Registry | None = None, app_specs_dir=None) -> dict[str, ActionSpec]:
-    """Compile every app-spec action declaration into an ActionSpec."""
+    """Compile every approved app-spec action declaration into an ActionSpec."""
     registry = registry or get_registry()
     directory = app_specs_dir or get_settings().app_specs_dir
     actions: dict[str, ActionSpec] = {}
 
-    for path in sorted(directory.glob("*.yaml")):
+    for path in sorted(Path(directory).glob("*.yaml")):
         spec = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        app = spec.get("app", path.stem)
-        for raw in spec.get("actions") or []:
-            name = raw.get("name")
-            if not name:
-                raise ActionSpecError(f"{path.name}: action without a name")
-            if name in actions:
-                raise ActionSpecError(f"duplicate action '{name}'")
-            entity = registry.resolve(raw.get("writes_to", ""))
-            if entity is None:
-                raise ActionSpecError(f"{name}: writes_to '{raw.get('writes_to')}' not in the registry")
-            entity_fields = set(registry.entity(entity).get("fields", {}))
-            fields = tuple(raw.get("fields", []))
-            unknown = [f for f in fields if f not in entity_fields]
-            if unknown:
-                raise ActionSpecError(f"{name}: fields not in registry: {unknown}")
-            operation = raw.get("operation", "insert")
-            if operation not in OPERATIONS:
-                raise ActionSpecError(f"{name}: operation must be one of {sorted(OPERATIONS)}")
-            key_field = raw.get("key_field")
-            if operation == "update" and (not key_field or key_field not in fields):
-                raise ActionSpecError(f"{name}: update actions need key_field within fields")
-            gate = raw.get("approval_gate", "none")
-            if gate not in GATES:
-                raise ActionSpecError(f"{name}: approval_gate must be one of {sorted(GATES)}")
-            required = tuple(raw.get("required", []))
-            missing = [r for r in required if r not in fields]
-            if missing:
-                raise ActionSpecError(f"{name}: required fields not in fields: {missing}")
-            actions[name] = ActionSpec(
-                app=app, name=name, entity=entity, table=registry.entity(entity)["table"],
-                operation=operation, key_field=key_field, fields=fields, required=required,
-                gate=gate,
-                on_approve=dict(raw.get("on_approve") or {}),
-                on_reject=dict(raw.get("on_reject") or {}),
-            )
+        parsed = parse_app_actions(spec, path.name, registry)
+        duplicates = set(parsed) & set(actions)
+        if duplicates:
+            raise ActionSpecError(f"duplicate action names across apps: {sorted(duplicates)}")
+        actions.update(parsed)
     return actions
 
 

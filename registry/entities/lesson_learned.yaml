@@ -21,6 +21,7 @@ fields:
   layer:        { type: text, required: false }
   status:       { type: text, required: false }
   approver_id:  { type: uuid, required: false }
+  updated_at:   { type: timestamptz, required: false }
 
 enums:
   layer:

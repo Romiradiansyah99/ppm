@@ -542,6 +542,91 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_apps(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    import yaml as _yaml
+
+    from ppm.appspec import load_app_spec
+    from ppm.compiler import (
+        DRAFTS_DIR,
+        CompileError,
+        approve_draft,
+        compile_app,
+        registry_summary,
+        save_draft,
+        validate_draft,
+    )
+    from ppm.models import get_app_spec_drafter
+    from ppm.workflows.actions import parse_app_actions
+
+    settings = get_settings()
+    registry = get_registry(str(settings.registry_dir))
+
+    if args.apps_cmd == "list":
+        paths = sorted(settings.app_specs_dir.glob("*.yaml"))
+        if not paths:
+            print("no approved apps")
+        for path in paths:
+            spec = load_app_spec(path, registry)
+            raw = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            actions = parse_app_actions(raw, path.name, registry)
+            print(f"{spec.name:<24} views={len(spec.views)} actions={len(actions)} "
+                  f"user={spec.user} owner={spec.owner}")
+        drafts = sorted(DRAFTS_DIR.glob("*.yaml")) if DRAFTS_DIR.is_dir() else []
+        for draft in drafts:
+            print(f"draft awaiting approval: {draft}")
+        return 0
+
+    if args.apps_cmd in {"validate", "compile"}:
+        path_arg = getattr(args, "path", None)
+        targets = [Path(path_arg)] if path_arg else sorted(settings.app_specs_dir.glob("*.yaml"))
+        failures = 0
+        for path in targets:
+            try:
+                compiled = compile_app(path, registry)
+                print(f"{path.name}: ok ({len(compiled['views'])} views, {len(compiled['actions'])} actions)")
+                if args.apps_cmd == "compile":
+                    for name, sql_text in compiled["views"].items():
+                        print(f"  view {name}: {sql_text[:130]}")
+                    for name, spec in sorted(compiled["actions"].items()):
+                        print(f"  action {name}: {spec.operation} {spec.entity} gate={spec.gate}")
+            except Exception as exc:
+                failures += 1
+                print(f"{path.name}: FAILED - {exc}")
+        for draft in sorted(DRAFTS_DIR.glob("*.yaml")) if DRAFTS_DIR.is_dir() else []:
+            issues = validate_draft(draft, registry)
+            print(f"draft {draft.name}: {'ok' if not issues else 'issues: ' + '; '.join(issues)}")
+        return 1 if failures else 0
+
+    if args.apps_cmd == "draft":
+        drafter = get_app_spec_drafter(settings)
+        text = drafter.draft(args.request, registry_summary(registry))
+        path = save_draft(text, args.name or "draft-app")
+        issues = validate_draft(path, registry)
+        print(f"draft written: {path}")
+        if issues:
+            print("draft does not compile yet:")
+            for issue in issues:
+                print(f"  - {issue}")
+            return 1
+        print("draft compiles clean. Review it, then approve with:")
+        print(f'  ppm apps approve "{path}" --user <you>')
+        return 0
+
+    if args.apps_cmd == "approve":
+        approved_by = args.user or settings.user_label
+        try:
+            target = approve_draft(args.file, approved_by=approved_by)
+        except CompileError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"approved by {approved_by}: {target}")
+        print("the compiler picks it up on the next load (ppm apps list, Platform page)")
+        return 0
+    return 1
+
+
 def cmd_silos(args: argparse.Namespace) -> int:
     """Report the Phase 3 silo machinery for the infosec review."""
     settings = get_settings()
@@ -758,6 +843,21 @@ def build_parser() -> argparse.ArgumentParser:
         entry.add_argument("--user", help="approver username (default: PPM_USER_LABEL)")
         entry.add_argument("--note")
     report.set_defaults(func=cmd_report)
+
+    apps = sub.add_parser("apps", help="app-spec compiler and AI authoring (Phase 6)")
+    apps_sub = apps.add_subparsers(dest="apps_cmd", required=True)
+    apps_sub.add_parser("list")
+    apps_validate = apps_sub.add_parser("validate")
+    apps_validate.add_argument("path", nargs="?")
+    apps_compile = apps_sub.add_parser("compile")
+    apps_compile.add_argument("path", nargs="?")
+    apps_draft = apps_sub.add_parser("draft")
+    apps_draft.add_argument("request", help="natural-language app request")
+    apps_draft.add_argument("--name")
+    apps_approve = apps_sub.add_parser("approve")
+    apps_approve.add_argument("file")
+    apps_approve.add_argument("--user")
+    apps.set_defaults(func=cmd_apps)
 
     registry = sub.add_parser("registry", help="definition registry utilities")
     registry_sub = registry.add_subparsers(dest="registry_cmd", required=True)

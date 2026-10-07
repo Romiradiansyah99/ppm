@@ -1,0 +1,35 @@
+app: variation-log
+version: 1
+user: UNASSIGNED
+owner: operations_lead
+data_sources:
+- ChangeEvent
+- Project
+permission_rule: project team only - silo rules apply to every read
+views:
+- name: changes
+  entity: ChangeEvent
+  fields: all
+  filters:
+  - project_id
+  - status
+  sort:
+  - created_at desc
+actions:
+- name: draft-app.change.create
+  writes_to: ChangeEvent
+  operation: insert
+  fields:
+  - project_id
+  - description
+  - cause
+  - cost_impact_idr
+  - status
+  required:
+  - project_id
+  - description
+  approval_gate: peer
+notifications: []
+memory_scope: shared
+deprecation_condition: no usage in 90 consecutive days
+failsafe: rows with missing fields render flagged

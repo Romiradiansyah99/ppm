@@ -61,6 +61,10 @@ CPU for ingest (slower, fine for 50-100 documents in Phase 0).
 .venv\Scripts\python.exe -m pytest          # full suite incl. database tests
 ```
 
+Then bring the office online: `ppm user add` for the named people (first
+approver with `--approver`), `ppm apps list` to see the compiled apps, and
+`ppm silos check` before the infosec conversation.
+
 ## 6. The app
 
 ```powershell

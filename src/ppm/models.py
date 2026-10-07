@@ -509,6 +509,135 @@ def get_report_drafter(settings: Settings) -> ReportDrafter:
 
 
 # ---------------------------------------------------------------------------
+# App-spec authoring (Phase 6)
+# ---------------------------------------------------------------------------
+
+class AppSpecDrafter(Protocol):
+    def draft(self, request: str, registry_context: str) -> str: ...
+
+
+_APP_SPEC_RULES = """You write PPM app-spec YAML.
+Required keys: app, version, user, owner, data_sources, permission_rule, views,
+actions, notifications, memory_scope, deprecation_condition, failsafe.
+Views: name, entity, fields (a list or "all"), filters, sort.
+Actions: name, writes_to, operation (insert|update), key_field for updates,
+fields, required, approval_gate (none|peer|owner|partner).
+Rules: use only entities and fields listed in the registry context; default to
+read-only; any action that changes money, client output or shared knowledge
+must carry an approval_gate; never invent fields.
+Return YAML only - no prose, no code fences."""
+
+
+class _StubAppSpecDrafter:
+    """Deterministic dev-only authoring: keyword-routed templates from the
+    registry. Good enough to exercise the draft -> validate -> approve flow."""
+
+    def draft(self, request: str, registry_context: str) -> str:
+        request_l = request.lower()
+        slug = "draft-app"
+
+        def spec_dict(name, owner, sources, views, actions):
+            return {
+                "app": name, "version": 1, "user": "UNASSIGNED", "owner": owner,
+                "data_sources": sources,
+                "permission_rule": "project team only - silo rules apply to every read",
+                "views": views, "actions": actions, "notifications": [],
+                "memory_scope": "shared",
+                "deprecation_condition": "no usage in 90 consecutive days",
+                "failsafe": "rows with missing fields render flagged",
+            }
+
+        if any(word in request_l for word in ("variation", "change", "register")):
+            return self._dump(spec_dict(
+                "variation-log", "operations_lead", ["ChangeEvent", "Project"],
+                [{"name": "changes", "entity": "ChangeEvent", "fields": "all",
+                  "filters": ["project_id", "status"], "sort": ["created_at desc"]}],
+                [{"name": f"{slug}.change.create", "writes_to": "ChangeEvent", "operation": "insert",
+                  "fields": ["project_id", "description", "cause", "cost_impact_idr", "status"],
+                  "required": ["project_id", "description"], "approval_gate": "peer"}],
+            ))
+        if any(word in request_l for word in ("risk", "raid", "issue")):
+            return self._dump(spec_dict(
+                "risk-watch", "operations_lead", ["Risk", "Project"],
+                [{"name": "risks", "entity": "Risk", "fields": "all",
+                  "filters": ["project_id", "status"], "sort": ["review_date asc"]}],
+                [{"name": f"{slug}.risk.create", "writes_to": "Risk", "operation": "insert",
+                  "fields": ["project_id", "category", "description", "likelihood", "impact", "status"],
+                  "required": ["project_id", "description"], "approval_gate": "owner"}],
+            ))
+        if any(word in request_l for word in ("deliverable", "tracker", "stage gate", "due")):
+            return self._dump(spec_dict(
+                "deliverable-watch", "operations_lead", ["Deliverable", "Project"],
+                [{"name": "deliverables", "entity": "Deliverable", "fields": "all",
+                  "filters": ["project_id", "status"], "sort": ["due_date asc"]}],
+                [{"name": f"{slug}.deliverable.create", "writes_to": "Deliverable", "operation": "insert",
+                  "fields": ["project_id", "type", "due_date", "status"],
+                  "required": ["project_id", "type"], "approval_gate": "none"}],
+            ))
+        if any(word in request_l for word in ("lesson", "knowledge", "learn")):
+            return self._dump(spec_dict(
+                "lesson-viewer", "platform_owner", ["LessonLearned", "Project"],
+                [{"name": "lessons", "entity": "LessonLearned", "fields": "all",
+                  "filters": ["sector", "stage"], "sort": ["trust_weight desc"]}],
+                [],
+            ))
+        # default: read-only lookup over the document index
+        return self._dump(spec_dict(
+            "document-lookup", "platform_owner", ["Document"],
+            [{"name": "documents", "entity": "Document", "fields": "all",
+              "filters": ["confidentiality_class", "ingest_status"], "sort": ["doc_date desc"]}],
+            [],
+        ))
+
+    @staticmethod
+    def _dump(spec: dict) -> str:
+        import yaml as _yaml
+
+        return _yaml.safe_dump(spec, sort_keys=False, allow_unicode=True)
+
+
+class _LLMAppSpecDrafter:
+    def __init__(self, chat: object) -> None:
+        self._chat = chat
+
+    def draft(self, request: str, registry_context: str) -> str:
+        prompt = (
+            f"{_APP_SPEC_RULES}\n\nRegistry context:\n{registry_context}\n\n"
+            f"Request:\n{request}\n\nYAML:"
+        )
+        try:
+            response = self._chat.invoke(prompt)
+        except Exception as exc:
+            raise ModelUnavailable(f"app-spec drafting failed: {exc}") from exc
+        content = response.content
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in content)
+        text = str(content).strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+            text = re.sub(r"\n?```$", "", text)
+        return text.strip() + "\n"
+
+
+def get_app_spec_drafter(settings: Settings) -> AppSpecDrafter:
+    if settings.provider == "stub":
+        return _StubAppSpecDrafter()
+    if settings.provider == "ollama":
+        from langchain_ollama import ChatOllama
+
+        return _LLMAppSpecDrafter(ChatOllama(model=settings.chat_model, base_url=settings.ollama_host, temperature=0))
+    if settings.provider == "api":
+        if not settings.api_base or not settings.api_key:
+            raise ModelUnavailable("PPM_API_BASE and PPM_API_KEY are required for provider=api")
+        from langchain_openai import ChatOpenAI
+
+        return _LLMAppSpecDrafter(
+            ChatOpenAI(model=settings.chat_model, base_url=settings.api_base, api_key=settings.api_key, temperature=0)
+        )
+    raise ModelUnavailable(f"unknown provider '{settings.provider}'")
+
+
+# ---------------------------------------------------------------------------
 # Factories and diagnostics
 # ---------------------------------------------------------------------------
 
