@@ -475,6 +475,27 @@ def cmd_memory(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_silos(args: argparse.Namespace) -> int:
+    """Report the Phase 3 silo machinery for the infosec review."""
+    settings = get_settings()
+    print(f"app dsn:  {'configured' if settings.dsn_app else 'NOT SET (PPM_DSN_APP)'}")
+    role = db.fetch_one("SELECT rolname FROM pg_roles WHERE rolname = 'ppm_app'")
+    print(f"role:     {'ppm_app exists' if role else 'ppm_app MISSING (run ppm init-db)'}")
+    for table in ("document", "cost_plan", "benchmark_rate", "document_chunk", "project"):
+        rls = db.fetch_one("SELECT relrowsecurity FROM pg_class WHERE relname = %s", (table,))
+        policies = db.fetch_one("SELECT count(*) AS n FROM pg_policies WHERE tablename = %s", (table,))
+        state = "on" if rls and rls["relrowsecurity"] else "OFF"
+        print(f"{table:<16} rls={state:<3} policies={policies['n'] if policies else 0}")
+    if settings.dsn_app:
+        try:
+            with db.get_app_pool().connection() as conn:
+                visible = conn.execute("SELECT count(*) FROM document").fetchone()[0]
+            print(f"app-role probe: ok ({visible} rows visible without person context - internal only)")
+        except Exception as exc:
+            print(f"app-role probe: FAILED ({exc})")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     settings = get_settings()
     registry = get_registry(str(settings.registry_dir))
@@ -651,6 +672,11 @@ def build_parser() -> argparse.ArgumentParser:
     memory_list = memory_sub.add_parser("list")
     memory_list.add_argument("--user")
     memory.set_defaults(func=cmd_memory)
+
+    silos = sub.add_parser("silos", help="silo enforcement report (Phase 3, for infosec)")
+    silos_sub = silos.add_subparsers(dest="silos_cmd", required=True)
+    silos_sub.add_parser("check")
+    silos.set_defaults(func=cmd_silos)
 
     registry = sub.add_parser("registry", help="definition registry utilities")
     registry_sub = registry.add_subparsers(dest="registry_cmd", required=True)

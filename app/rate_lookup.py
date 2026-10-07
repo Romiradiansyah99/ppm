@@ -19,6 +19,7 @@ from ppm.appspec import AppSpec, AppSpecError, load_app_spec          # noqa: E4
 from ppm.config import Settings, ConfigError, get_settings            # noqa: E402
 from ppm.registry import Registry, RegistryError, get_registry        # noqa: E402
 from ppm.workflows.retrieval import RateQuery, rate_search            # noqa: E402
+from ui_common import require_user, user_badge                        # noqa: E402
 
 SPEC_FILE = "rate-lookup.yaml"
 
@@ -51,10 +52,13 @@ except (ConfigError, RegistryError, AppSpecError) as exc:
     st.error(f"PPM is not ready: {exc}")
     st.stop()
 
+person = require_user()
+user_badge()
+
 st.title("PPM Rate Lookup")
 st.caption(
     f"Phase 0 - read-only, office-internal rates with provenance. "
-    f"user: {spec.user} | owner: {spec.owner} | registry {registry.version} | provider {settings.provider}"
+    f"user: {person['display_name']} | owner: {spec.owner} | registry {registry.version} | provider {settings.provider}"
 )
 
 with st.sidebar:
@@ -94,7 +98,8 @@ if run or "rows" in st.session_state:
             limit=limit,
         )
         try:
-            rows, degraded = rate_search(query, settings)
+            rows, degraded = rate_search(query, settings, person_id=person["person_id"],
+                                         log_user=person["username"])
         except Exception as exc:
             st.error(f"search failed: {exc}")
             st.info("Is Postgres running? scripts/dev_pg.ps1 start - then ppm init-db.")

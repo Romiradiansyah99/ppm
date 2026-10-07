@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 os.environ["PPM_DSN"] = "postgresql://ppm:ppm_dev_password@127.0.0.1:5432/ppm_test"
+os.environ["PPM_DSN_APP"] = "postgresql://ppm_app:ppm_app_dev_password@127.0.0.1:5432/ppm_test"
 
 import pytest  # noqa: E402
 

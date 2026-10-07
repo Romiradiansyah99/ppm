@@ -34,6 +34,7 @@ class RagState(TypedDict, total=False):
     mode: str                      # auto | literal | vector
     chunks: list[dict]
     weak_context: bool
+    guardrail_ran: bool
     answer_raw: str
     answer: str
     citations_removed: int
@@ -72,8 +73,10 @@ class RagWorkflow:
             document_id=state.get("document_id"),
             limit=10,
             mode=state.get("mode", "auto"),
+            person_id=state.get("person_id"),
         )
-        return {"chunks": chunks, "degraded": degraded}
+        return {"chunks": chunks, "degraded": degraded,
+                "guardrail_ran": state.get("person_id") is not None}
 
     def _grade(self, state: RagState) -> dict:
         chunks = state.get("chunks") or []
@@ -97,7 +100,8 @@ class RagWorkflow:
         if not chunks or answer_raw.strip() == NO_SOURCE:
             stats = dict(state.get("stats") or {})
             stats.update({"chunks_retrieved": len(chunks), "citations_removed": 0,
-                          "weak_context": bool(state.get("weak_context"))})
+                          "weak_context": bool(state.get("weak_context")),
+                          "guardrail_ran": bool(state.get("guardrail_ran"))})
             return {"answer": NO_SOURCE, "citations_removed": 0, "stats": stats}
         checked, removed = check_citations(answer_raw, len(chunks))
         stats = dict(state.get("stats") or {})
@@ -105,6 +109,7 @@ class RagWorkflow:
             "chunks_retrieved": len(chunks),
             "citations_removed": removed,
             "weak_context": bool(state.get("weak_context")),
+            "guardrail_ran": bool(state.get("guardrail_ran")),
         })
         return {"answer": checked, "citations_removed": removed, "stats": stats}
 

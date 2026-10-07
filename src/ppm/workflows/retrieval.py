@@ -116,11 +116,13 @@ def rate_search(
     *,
     log_user: str | None = None,
     log: bool = True,
+    person_id: str | None = None,
 ) -> tuple[list[dict], str | None]:
     """Run the hybrid search. Returns (rows, degraded_reason).
 
-    degraded_reason is set when vector similarity was requested but the
-    embedder was unavailable - the term is then matched literally (ILIKE).
+    With person_id set, the query runs as the ppm_app role (row level
+    security) and every row is re-checked by the guardrail before returning:
+    silo enforcement is defence in depth, not one filter.
     """
     settings = settings or get_settings()
     vector: list[float] | None = None
@@ -137,7 +139,18 @@ def rate_search(
     )
     if vector is not None:
         params = _bind_vector(sql, params, vector)
-    rows = db.fetch_all(sql, params)
+
+    if person_id:
+        from psycopg.rows import dict_row
+
+        from ppm import guardrails
+
+        with db.connection_app(person_id) as conn, conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        rows = guardrails.filter_visible(person_id, rows)
+    else:
+        rows = db.fetch_all(sql, params)
 
     for row in rows:
         row["rate_id"] = str(row["rate_id"])
@@ -178,11 +191,13 @@ def chunk_search(
     document_id: str | None = None,
     limit: int = 8,
     mode: str = "auto",
+    person_id: str | None = None,
 ) -> tuple[list[dict], str | None]:
     """Hybrid chunk search. mode: auto (vector, then literal fallback),
     literal (ILIKE only, no embeddings), vector (vector only, fails loudly).
 
-    Returns (rows, degraded_reason); rows carry section_ref + document provenance.
+    With person_id set the query runs under RLS as ppm_app and passes through
+    the guardrail before returning.
     """
     settings = settings or get_settings()
     vector: list[float] | None = None
@@ -224,14 +239,22 @@ def chunk_search(
     sql += " LIMIT %s"
     params.append(limit)
 
-    rows = db.fetch_all(sql, params)
+    if person_id:
+        from psycopg.rows import dict_row
+
+        from ppm import guardrails
+
+        with db.connection_app(person_id) as conn, conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        rows = guardrails.filter_visible(person_id, rows)
+    else:
+        rows = db.fetch_all(sql, params)
     for row in rows:
         row["chunk_id"] = str(row["chunk_id"])
         row["document_id"] = str(row["document_id"])
         if row.get("similarity") is not None:
             row["similarity"] = float(row["similarity"])
-    # Note: silo filtering lands with the RLS migration (Phase 3); the
-    # guardrail node re-checks every chunk before it reaches the model.
     return rows, degraded
 
 

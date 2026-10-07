@@ -15,8 +15,11 @@ st.set_page_config(page_title="PPM Ask", layout="wide")
 
 from ppm.config import get_settings                                          # noqa: E402
 from ppm.workflows.rag import NO_SOURCE, RagWorkflow                         # noqa: E402
+from ui_common import require_user, user_badge                               # noqa: E402
 
 settings = get_settings()
+person = require_user()
+user_badge()
 
 st.title("Ask the document index")
 st.caption(
@@ -34,7 +37,7 @@ with st.form("ask"):
 
 if asked and question.strip():
     try:
-        result = RagWorkflow(settings).ask(question, mode=mode)
+        result = RagWorkflow(settings).ask(question, mode=mode, person_id=person["person_id"])
         st.session_state["rag_result"] = dict(result)
         st.session_state["rag_question"] = question
     except Exception as exc:

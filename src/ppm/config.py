@@ -31,6 +31,7 @@ def _env(name: str, default: str = "") -> str:
 @dataclass(frozen=True)
 class Settings:
     dsn: str
+    dsn_app: str
     residency: str
     provider: str
     ollama_host: str
@@ -67,6 +68,7 @@ def get_settings() -> Settings:
     load_dotenv(REPO_ROOT / ".env")
     return Settings(
         dsn=_env("PPM_DSN"),
+        dsn_app=_env("PPM_DSN_APP"),
         residency=_env("PPM_RESIDENCY", "local"),
         provider=_env("PPM_MODEL_PROVIDER", "ollama"),
         ollama_host=_env("PPM_OLLAMA_HOST", "http://127.0.0.1:11434"),
