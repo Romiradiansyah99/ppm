@@ -37,6 +37,14 @@ class Registry:
         except KeyError:
             raise RegistryError(f"unknown entity '{name}' (registry knows: {sorted(self.entities)})") from None
 
+    def resolve(self, name: object) -> str | None:
+        """Case/underscore-insensitive entity name lookup ("LessonLearned")."""
+        key = str(name).lower().replace("_", "").replace("-", "").replace(" ", "")
+        for entity_name in self.entities:
+            if entity_name.lower().replace("_", "") == key:
+                return entity_name
+        return None
+
     def enum_values(self, entity: str, field_name: str) -> list[str]:
         enums = self.entity(entity).get("enums", {})
         spec = enums.get(field_name)

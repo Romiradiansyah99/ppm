@@ -1,0 +1,45 @@
+# The Phase 2 app: two-layer knowledge (plan section 6, Phase 2).
+# Consultants contribute lessons privately; approvers promote the good ones
+# to the shared layer with a trust weight; every weight change is logged.
+app: knowledge
+version: 1
+user: UNASSIGNED
+owner: platform_owner
+data_sources: [LessonLearned, Person, CompetencyStandard]
+permission_rule: private lessons are visible only to their author; shared lessons to all staff
+views:
+  - name: my_lessons
+    entity: LessonLearned
+    fields: all
+    filters: [status]
+    sort: [updated_at desc]
+  - name: shared_lessons
+    entity: LessonLearned
+    fields: [text_content, sector, stage, trust_weight, author_id, updated_at]
+    filters: [sector, stage]
+    sort: [trust_weight desc]
+actions:
+  - name: lesson.submit
+    writes_to: LessonLearned
+    operation: insert
+    fields: [project_id, text_content, sector, stage]
+    required: [text_content]
+    approval_gate: none
+  - name: lesson.promote
+    writes_to: LessonLearned
+    operation: update
+    key_field: lesson_id
+    fields: [lesson_id, layer, status, approver_id, trust_weight]
+    required: [lesson_id]
+    approval_gate: owner
+  - name: lesson.remove
+    writes_to: LessonLearned
+    operation: update
+    key_field: lesson_id
+    fields: [lesson_id, status]
+    required: [lesson_id]
+    approval_gate: owner
+notifications: []
+memory_scope: both            # private facts + the shared lesson layer
+deprecation_condition: no lesson activity in 180 consecutive days
+failsafe: lessons without sector or stage render unclassified

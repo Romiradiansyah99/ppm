@@ -1,0 +1,37 @@
+# PPM definition registry - lesson learned (plan section 3, entity 11).
+# Two-layer memory: private drafts -> approved shared lessons with a trust
+# weight that decays automatically on rejections (every change logged).
+entity: lesson_learned
+table: lesson_learned
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: platform_owner
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  lesson_id:    { type: uuid, required: false }
+  project_id:   { type: uuid, required: false }
+  author_id:    { type: uuid, required: true }
+  text_content: { type: text, required: true }
+  sector:       { type: text, required: false }
+  stage:        { type: text, required: false }
+  trust_weight: { type: numeric, required: false }
+  layer:        { type: text, required: false }
+  status:       { type: text, required: false }
+  approver_id:  { type: uuid, required: false }
+
+enums:
+  layer:
+    values: [private, shared]
+  status:
+    values: [draft, pending_approval, shared, rejected, removed]
+  sector:
+    status: GUESS
+    owner: head_qs
+    values: [residential, commercial, hospitality, industrial, infrastructure, mixed-use, other]
+  stage:
+    status: GUESS
+    owner: operations_lead
+    values: [feasibility, concept, design, tender, construction, closeout, defects]

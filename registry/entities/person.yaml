@@ -1,0 +1,28 @@
+# PPM definition registry - person (plan section 3, entity 8).
+# Phase 2: device accounts (username + scrypt password); SSO stays out until
+# Tier C approval.
+entity: person
+table: person
+tier: A
+registry_version: 1
+status: GUESS
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  username:      { type: text, required: true }
+  display_name:  { type: text, required: true }
+  password_hash: { type: text, required: true, confidential: true }
+  role:          { type: text, required: false }
+  level:         { type: text, required: false }
+  is_approver:   { type: boolean, required: false }
+
+enums:
+  role:
+    status: GUESS
+    owner: operations_lead
+    values: [consultant, senior_consultant, associate, approver, platform_owner]
+  level:
+    status: GUESS
+    values: [graduate, consultant, senior, principal]

@@ -87,8 +87,9 @@ def clean_db(prepared_db):
     from ppm import db
 
     db.execute(
-        "TRUNCATE benchmark_rate, cost_plan, document, project, ingest_run, search_log, "
-        "document_chunk RESTART IDENTITY CASCADE"
+        "TRUNCATE benchmark_rate, cost_plan, document, project, ingest_run, search_log, document_chunk, "
+        "lesson_weight_log, lesson_learned, person_competency, competency_standard, private_memory, "
+        "action_run, person RESTART IDENTITY CASCADE"
     )
     yield
     db.reset_pool()

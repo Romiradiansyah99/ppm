@@ -1,0 +1,27 @@
+# PPM definition registry - competency standard (plan section 3, entity 9).
+# The office's definition of a skill at a level. Mastered in PPM from the
+# capability programme documents.
+entity: competency_standard
+table: competency_standard
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  pillar:            { type: text, required: true }
+  name:              { type: text, required: true }
+  level:             { type: text, required: true }
+  description:       { type: text, required: false }
+  evidence_required: { type: text, required: false }
+
+enums:
+  pillar:
+    status: GUESS
+    owner: operations_lead
+    values: [cost_management, project_management, commercial, leadership, digital]
+  level:
+    status: GUESS
+    values: [aware, practitioner, expert]

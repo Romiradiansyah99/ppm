@@ -281,6 +281,200 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_user(args: argparse.Namespace) -> int:
+    import secrets as _secrets
+
+    from ppm import auth
+
+    if args.user_cmd == "add":
+        if auth.get_person_by_username(args.username):
+            print(f"error: user '{args.username}' already exists", file=sys.stderr)
+            return 1
+        password = args.password or _secrets.token_urlsafe(12)
+        auth.create_person(args.username, args.name or args.username, password,
+                           role=args.role, level=args.level, is_approver=args.approver)
+        print(f"created user {args.username} (role {args.role}{', approver' if args.approver else ''})")
+        if not args.password:
+            print(f"password: {password}  (shown once - change with ppm user passwd)")
+        return 0
+
+    if args.user_cmd == "list":
+        people = auth.list_people()
+        if not people:
+            print("no users yet - ppm user add <username> --name \"...\"")
+            return 0
+        for person in people:
+            flag = "approver" if person["is_approver"] else ""
+            print(f"{person['username']:<20} {person['display_name']:<26} {person['role']:<18} {flag}")
+        return 0
+
+    if args.user_cmd == "passwd":
+        password = args.password or _secrets.token_urlsafe(12)
+        if not auth.set_password(args.username, password):
+            print(f"error: no user '{args.username}'", file=sys.stderr)
+            return 1
+        print(f"password updated for {args.username}")
+        if not args.password:
+            print(f"password: {password}")
+        return 0
+    return 1
+
+
+def _resolve_person(username: str | None, settings) -> dict:
+    from ppm import auth
+
+    label = username or settings.user_label
+    person = auth.get_person_by_username(label)
+    if person is None:
+        raise ConfigError(f"unknown user '{label}' - add them with: ppm user add {label} --name \"...\"")
+    return person
+
+
+def cmd_action(args: argparse.Namespace) -> int:
+    from ppm.workflows.actions import ActionWorkflow, load_actions
+
+    settings = get_settings()
+    registry = get_registry(str(settings.registry_dir))
+    actions = load_actions(registry, settings.app_specs_dir)
+
+    if args.action_cmd == "list":
+        if not actions:
+            print("no actions declared in app_specs/")
+            return 0
+        for name, spec in sorted(actions.items()):
+            print(f"{name:<20} {spec.operation:<7} {spec.entity:<20} gate={spec.gate:<8} app={spec.app}")
+        return 0
+
+    spec = actions.get(args.name)
+    if spec is None:
+        print(f"error: no action '{args.name}' (ppm action list)", file=sys.stderr)
+        return 1
+    actor = _resolve_person(args.user, settings)
+    params: dict = {}
+    for pair in args.param or []:
+        if "=" not in pair:
+            print(f"error: --param expects key=value, got '{pair}'", file=sys.stderr)
+            return 1
+        key, value = pair.split("=", 1)
+        params[key] = value
+    params = {key: value for key, value in params.items() if value != ""}
+
+    workflow = ActionWorkflow(spec, registry, settings)
+    with _checkpointer(settings) as checkpointer:
+        workflow.compile(checkpointer)
+        result = workflow.run(actor["person_id"], params)
+        if interrupted(result):
+            db.execute(
+                "UPDATE action_run SET status = 'awaiting_approval', updated_at = now() WHERE thread_id = %s",
+                (result["thread_id"],),
+            )
+            print(f"{args.name}: awaiting approval (gate: {spec.gate})")
+            print(f"  run {result['thread_id']} - see: ppm approvals list")
+        else:
+            print(f"{args.name}: {result.get('status')}")
+            if result.get("error"):
+                print(f"  error: {result['error']}")
+                return 1
+            record = result.get("result") or {}
+            if record:
+                keys = [k for k in record if k not in {"created_at", "updated_at", "password_hash"}]
+                print("  " + "  ".join(f"{k}={record[k]}" for k in keys[:6]))
+    return 0
+
+
+def cmd_approvals(args: argparse.Namespace) -> int:
+    from ppm.workflows.actions import ActionWorkflow, load_actions
+
+    settings = get_settings()
+    registry = get_registry(str(settings.registry_dir))
+
+    if args.approvals_cmd == "list":
+        rows = db.fetch_all(
+            "SELECT ar.run_id, ar.app, ar.action, ar.params, ar.created_at, p.username AS actor "
+            "FROM action_run ar LEFT JOIN person p ON p.person_id = ar.actor_id "
+            "WHERE ar.status = 'awaiting_approval' ORDER BY ar.created_at"
+        )
+        if not rows:
+            print("no approvals waiting")
+            return 0
+        for row in rows:
+            print(f"{row['run_id']}  {row['action']:<18} by {row['actor'] or '?'}  ({row['created_at']:%Y-%m-%d %H:%M})")
+        return 0
+
+    run = db.fetch_one("SELECT * FROM action_run WHERE run_id = %s OR thread_id = %s",
+                       (args.run_id, args.run_id))
+    if run is None:
+        print(f"error: no action run '{args.run_id}'", file=sys.stderr)
+        return 1
+
+    if args.approvals_cmd == "show":
+        print(f"{run['action']} ({run['app']})  status={run['status']}")
+        print(f"thread: {run['thread_id']}")
+        print("params: " + json.dumps(run["params"], indent=2, default=str))
+        if run.get("result"):
+            print("result: " + json.dumps(run["result"], indent=2, default=str))
+        if run.get("error"):
+            print(f"error: {run['error']}")
+        return 0
+
+    actions = load_actions(registry, settings.app_specs_dir)
+    spec = actions.get(run["action"])
+    if spec is None:
+        print(f"error: action '{run['action']}' no longer declared", file=sys.stderr)
+        return 1
+    if run["status"] != "awaiting_approval":
+        print(f"error: run is '{run['status']}', not awaiting approval", file=sys.stderr)
+        return 1
+    approver = _resolve_person(args.user, settings)
+    workflow = ActionWorkflow(spec, registry, settings)
+    with _checkpointer(settings) as checkpointer:
+        workflow.compile(checkpointer)
+        result = workflow.resume(run["thread_id"], {
+            "action": "approve" if args.approvals_cmd == "approve" else "reject",
+            "approver_id": approver["person_id"],
+            "note": args.note,
+        })
+    print(f"{run['action']}: {result.get('status')} (by {approver['username']})")
+    if result.get("error"):
+        print(f"  error: {result['error']}")
+        return 1
+    record = result.get("result") or {}
+    if record:
+        keys = [k for k in record if k not in {"created_at", "updated_at", "password_hash"}]
+        print("  " + "  ".join(f"{k}={record[k]}" for k in keys[:6]))
+    return 0
+
+
+def cmd_memory(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    person = _resolve_person(args.user, settings)
+    if args.memory_cmd == "set":
+        try:
+            content = json.loads(args.json)
+        except json.JSONDecodeError as exc:
+            print(f"error: --json must be valid JSON: {exc}", file=sys.stderr)
+            return 1
+        db.execute(
+            "INSERT INTO private_memory (person_id, kind, content) VALUES (%s, %s, %s) "
+            "ON CONFLICT (person_id, kind) DO UPDATE SET content = EXCLUDED.content, updated_at = now()",
+            (person["person_id"], args.kind, json.dumps(content)),
+        )
+        print(f"memory '{args.kind}' set for {person['username']} (private layer)")
+        return 0
+    if args.memory_cmd == "list":
+        rows = db.fetch_all(
+            "SELECT kind, content, updated_at FROM private_memory WHERE person_id = %s ORDER BY kind",
+            (person["person_id"],),
+        )
+        if not rows:
+            print(f"no private memory for {person['username']}")
+            return 0
+        for row in rows:
+            print(f"{row['kind']:<20} {json.dumps(row['content'], default=str)[:120]}  ({row['updated_at']:%Y-%m-%d})")
+        return 0
+    return 1
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     settings = get_settings()
     registry = get_registry(str(settings.registry_dir))
@@ -306,6 +500,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     pending = db.fetch_one("SELECT count(*) AS n FROM ingest_run WHERE status = 'awaiting_review'")
     if pending["n"]:
         print(f"AWAITING REVIEW: {pending['n']} document(s) - ppm review list")
+    approvals = db.fetch_one("SELECT count(*) AS n FROM action_run WHERE status = 'awaiting_approval'")
+    if approvals and approvals["n"]:
+        print(f"AWAITING APPROVAL: {approvals['n']} action run(s) - ppm approvals list")
 
     last = db.fetch_one("SELECT created_at FROM search_log ORDER BY created_at DESC LIMIT 1")
     if last:
@@ -409,6 +606,51 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.set_defaults(func=cmd_eval)
 
     sub.add_parser("status", help="truth-layer counters, review queue, deprecation check").set_defaults(func=cmd_status)
+
+    user = sub.add_parser("user", help="device accounts (Phase 2, no SSO)")
+    user_sub = user.add_subparsers(dest="user_cmd", required=True)
+    user_add = user_sub.add_parser("add")
+    user_add.add_argument("username")
+    user_add.add_argument("--name")
+    user_add.add_argument("--role", default="consultant")
+    user_add.add_argument("--level")
+    user_add.add_argument("--approver", action="store_true")
+    user_add.add_argument("--password", help="omit to generate one and print it once")
+    user_sub.add_parser("list")
+    user_passwd = user_sub.add_parser("passwd")
+    user_passwd.add_argument("username")
+    user_passwd.add_argument("--password")
+    user.set_defaults(func=cmd_user)
+
+    action = sub.add_parser("action", help="compiled action graphs from app specs")
+    action_sub = action.add_subparsers(dest="action_cmd", required=True)
+    action_sub.add_parser("list")
+    action_run = action_sub.add_parser("run")
+    action_run.add_argument("name")
+    action_run.add_argument("--user")
+    action_run.add_argument("--param", action="append", help="key=value (repeatable)")
+    action.set_defaults(func=cmd_action)
+
+    approvals = sub.add_parser("approvals", help="approval queue for gated action runs")
+    approvals_sub = approvals.add_subparsers(dest="approvals_cmd", required=True)
+    approvals_sub.add_parser("list")
+    for command in ("show", "approve", "reject"):
+        entry = approvals_sub.add_parser(command)
+        entry.add_argument("run_id")
+        if command != "show":
+            entry.add_argument("--user", help="approver username (default: PPM_USER_LABEL)")
+            entry.add_argument("--note")
+    approvals.set_defaults(func=cmd_approvals)
+
+    memory = sub.add_parser("memory", help="private per-user memory (Phase 2)")
+    memory_sub = memory.add_subparsers(dest="memory_cmd", required=True)
+    memory_set = memory_sub.add_parser("set")
+    memory_set.add_argument("kind")
+    memory_set.add_argument("--user")
+    memory_set.add_argument("--json", required=True)
+    memory_list = memory_sub.add_parser("list")
+    memory_list.add_argument("--user")
+    memory.set_defaults(func=cmd_memory)
 
     registry = sub.add_parser("registry", help="definition registry utilities")
     registry_sub = registry.add_subparsers(dest="registry_cmd", required=True)
