@@ -8,6 +8,7 @@ langgraph-checkpoint-postgres
 langchain-core
 langchain-ollama
 langchain-openai
+langchain-text-splitters
 psycopg[binary,pool]
 pgvector
 pydantic

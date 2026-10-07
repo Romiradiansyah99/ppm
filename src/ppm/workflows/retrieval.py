@@ -16,6 +16,7 @@ from typing import Any
 from ppm import db
 from ppm.config import Settings, get_settings
 from ppm.models import ModelUnavailable, embed_query
+from ppm.text import literal_terms
 
 _SELECT = """
 SELECT r.rate_id, r.description, r.element_code, r.rate_idr, r.unit, r.date_normalised_to,
@@ -52,15 +53,12 @@ class RateQuery:
         }
 
 
-def _escape_like(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def build_search_sql(query: RateQuery, has_vector: bool, text_like: str | None = None) -> tuple[str, list[Any]]:
     """Pure SQL builder - unit tested without a database.
 
-    text_like is the degraded text mode: when embeddings are unavailable the
-    term is matched literally (ILIKE) instead of being silently ignored.
+    text_like is the degraded text mode: significant terms are matched with OR
+    and ranked by how many terms a row hits, instead of silently ignoring the
+    text while embeddings are unavailable.
     """
     params: list[Any] = []
     sql = _SELECT.format(
@@ -69,9 +67,10 @@ def build_search_sql(query: RateQuery, has_vector: bool, text_like: str | None =
     if has_vector:
         params.append(None)  # placeholder position; the vector is bound by the caller
 
-    if text_like:
-        sql += " AND r.description ILIKE %s"
-        params.append(f"%{_escape_like(text_like)}%")
+    terms = literal_terms(text_like) if text_like else []
+    if terms:
+        sql += " AND (" + " OR ".join("r.description ILIKE %s" for _ in terms) + ")"
+        params.extend(f"%{term}%" for term in terms)
     if query.sector:
         sql += " AND r.sector = %s"
         params.append(query.sector)
@@ -90,7 +89,14 @@ def build_search_sql(query: RateQuery, has_vector: bool, text_like: str | None =
     if has_vector:
         sql += " AND r.embedding IS NOT NULL"
 
-    sql += " ORDER BY similarity DESC" if has_vector else " ORDER BY r.date_normalised_to DESC, r.rate_idr DESC"
+    if has_vector:
+        sql += " ORDER BY similarity DESC"
+    elif terms:
+        score = " + ".join("(r.description ILIKE %s)::int" for _ in terms)
+        params.extend(f"%{term}%" for term in terms)
+        sql += f" ORDER BY {score} DESC, r.date_normalised_to DESC, r.rate_idr DESC"
+    else:
+        sql += " ORDER BY r.date_normalised_to DESC, r.rate_idr DESC"
     sql += " LIMIT %s"
     params.append(query.limit)
     return sql, params
@@ -148,6 +154,84 @@ def rate_search(
         except Exception:
             pass  # instrumentation must never break a search
 
+    return rows, degraded
+
+
+# --- chunk retrieval (Phase 1: cited search over the document index) ---------
+
+_CHUNK_SELECT = """
+SELECT c.chunk_id, c.chunk_index, c.section_ref, c.text_content,
+       d.document_id, d.source_path, d.hash AS document_hash, d.confidentiality_class,
+       p.name AS project_name
+       {similarity}
+FROM document_chunk c
+JOIN document d ON d.document_id = c.document_id
+LEFT JOIN project p ON p.project_id = d.project_id
+WHERE d.ingest_status = 'indexed'
+"""
+
+
+def chunk_search(
+    text: str | None,
+    settings: Settings | None = None,
+    *,
+    document_id: str | None = None,
+    limit: int = 8,
+    mode: str = "auto",
+) -> tuple[list[dict], str | None]:
+    """Hybrid chunk search. mode: auto (vector, then literal fallback),
+    literal (ILIKE only, no embeddings), vector (vector only, fails loudly).
+
+    Returns (rows, degraded_reason); rows carry section_ref + document provenance.
+    """
+    settings = settings or get_settings()
+    vector: list[float] | None = None
+    degraded: str | None = None
+
+    if text and mode != "literal":
+        try:
+            vector = embed_query(settings, text)
+        except ModelUnavailable as exc:
+            if mode == "vector":
+                raise
+            degraded = f"vector similarity off ({exc}); matched literally instead"
+
+    params: list[Any] = []
+    sql = _CHUNK_SELECT.format(
+        similarity=", (1 - (c.embedding <=> %s::vector)) AS similarity" if vector is not None else ", NULL AS similarity"
+    )
+    if vector is not None:
+        params.append(vector)
+
+    terms = literal_terms(text) if (text and vector is None) else []
+    if document_id:
+        sql += " AND d.document_id = %s"
+        params.append(document_id)
+    if terms:
+        sql += " AND (" + " OR ".join("c.text_content ILIKE %s" for _ in terms) + ")"
+        params.extend(f"%{term}%" for term in terms)
+    if vector is not None:
+        sql += " AND c.embedding IS NOT NULL"
+
+    if vector is not None:
+        sql += " ORDER BY similarity DESC"
+    elif terms:
+        score = " + ".join("(c.text_content ILIKE %s)::int" for _ in terms)
+        params.extend(f"%{term}%" for term in terms)
+        sql += f" ORDER BY {score} DESC, d.doc_date DESC NULLS LAST, c.chunk_index"
+    else:
+        sql += " ORDER BY d.doc_date DESC NULLS LAST, c.chunk_index"
+    sql += " LIMIT %s"
+    params.append(limit)
+
+    rows = db.fetch_all(sql, params)
+    for row in rows:
+        row["chunk_id"] = str(row["chunk_id"])
+        row["document_id"] = str(row["document_id"])
+        if row.get("similarity") is not None:
+            row["similarity"] = float(row["similarity"])
+    # Note: silo filtering lands with the RLS migration (Phase 3); the
+    # guardrail node re-checks every chunk before it reaches the model.
     return rows, degraded
 
 

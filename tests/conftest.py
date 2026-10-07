@@ -43,6 +43,13 @@ def registry():
     return get_registry()
 
 
+@pytest.fixture()
+def stub_settings(settings):
+    from dataclasses import replace
+
+    return replace(settings, provider="stub")
+
+
 @pytest.fixture(scope="session")
 def samples() -> dict[str, Path]:
     """Ensure the synthetic sample workbooks exist."""
@@ -80,8 +87,8 @@ def clean_db(prepared_db):
     from ppm import db
 
     db.execute(
-        "TRUNCATE benchmark_rate, cost_plan, document, project, ingest_run, search_log "
-        "RESTART IDENTITY CASCADE"
+        "TRUNCATE benchmark_rate, cost_plan, document, project, ingest_run, search_log, "
+        "document_chunk RESTART IDENTITY CASCADE"
     )
     yield
     db.reset_pool()

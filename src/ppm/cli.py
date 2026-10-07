@@ -198,6 +198,89 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reindex(args: argparse.Namespace) -> int:
+    """Chunk + embed indexed documents (backfill or rebuild after a chunker
+    change). Reads the source files again by their recorded paths."""
+    from ppm.loaders import load_document
+    from ppm.workflows.chunking import index_document_chunks
+
+    settings = get_settings()
+    documents = db.fetch_all(
+        "SELECT document_id, source_path FROM document WHERE ingest_status = 'indexed' ORDER BY source_path"
+    )
+    if not documents:
+        print("no indexed documents")
+        return 0
+    for document in documents:
+        existing = db.fetch_one(
+            "SELECT count(*) AS n FROM document_chunk WHERE document_id = %s", (document["document_id"],)
+        )["n"]
+        if existing and not args.force:
+            print(f"skip  {document['source_path']} ({existing} chunks; --force to rebuild)")
+            continue
+        try:
+            parsed = load_document(document["source_path"])
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"skip  {document['source_path']} ({exc})")
+            continue
+        written, warning = index_document_chunks(document["document_id"], parsed, settings, replace=args.force)
+        line = f"index {document['source_path']}: {written} chunks"
+        if warning:
+            line += f"  warning: {warning}"
+        print(line)
+    return 0
+
+
+def cmd_ask(args: argparse.Namespace) -> int:
+    from ppm.workflows.rag import RagWorkflow
+
+    settings = get_settings()
+    workflow = RagWorkflow(settings)
+    result = workflow.ask(args.question, mode="literal" if args.literal else "auto")
+    answer = result.get("answer") or ""
+    chunks = result.get("chunks") or []
+    if args.json:
+        print(json.dumps({
+            "answer": answer,
+            "degraded": result.get("degraded"),
+            "stats": result.get("stats"),
+            "chunks": [
+                {"ref": chunk["section_ref"], "source": chunk["source_path"],
+                 "similarity": chunk.get("similarity")}
+                for chunk in chunks
+            ],
+        }, indent=2, default=str))
+        return 0
+    if result.get("degraded"):
+        print(f"note: {result['degraded']}")
+    print(answer)
+    if chunks:
+        print()
+        for index, chunk in enumerate(chunks, start=1):
+            similarity = f"  sim={chunk['similarity']:.3f}" if chunk.get("similarity") is not None else ""
+            print(f"  [S{index}] {chunk['source_path']}  {chunk['section_ref']}{similarity}")
+    return 0
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    from ppm.eval import run_eval
+
+    report = run_eval(mode="literal" if args.literal else "auto", limit=args.limit, save=not args.no_save)
+    for row in report["results"]:
+        ok = row["citation_ok"] and row["keyword_ok"] is not False
+        print(f"[{'ok' if ok else 'MISS'}] {row['question'][:72]}")
+    summary = report["summary"]
+    print(
+        f"citations {summary['citation_rate']:.0%}  keywords "
+        f"{summary['keyword_rate'] if summary['keyword_rate'] is not None else '-'}  sources "
+        f"{summary['source_rate'] if summary['source_rate'] is not None else '-'}  "
+        f"unsupported-removed {summary['unsupported_removed']}  (provider={summary['provider']}, mode={summary['mode']})"
+    )
+    if report.get("path"):
+        print(f"report: {report['path']}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     settings = get_settings()
     registry = get_registry(str(settings.registry_dir))
@@ -306,6 +389,24 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--limit", type=int, default=25)
     search.add_argument("--json", action="store_true")
     search.set_defaults(func=cmd_search)
+
+    ask = sub.add_parser("ask", help="cited answer over the document index (Phase 1 RAG)")
+    ask.add_argument("question")
+    ask.add_argument("--literal", action="store_true", help="match text literally, no embeddings")
+    ask.add_argument("--json", action="store_true")
+    ask.set_defaults(func=cmd_ask)
+
+    reindex = sub.add_parser("reindex", help="chunk + embed indexed documents (backfill/rebuild)")
+    reindex.add_argument("--force", action="store_true", help="delete and rebuild existing chunks")
+    reindex.set_defaults(func=cmd_reindex)
+
+    eval_parser = sub.add_parser("eval", help="gold-set evaluation harness")
+    eval_sub = eval_parser.add_subparsers(dest="eval_cmd", required=True)
+    eval_rag = eval_sub.add_parser("rag")
+    eval_rag.add_argument("--literal", action="store_true")
+    eval_rag.add_argument("--limit", type=int)
+    eval_rag.add_argument("--no-save", action="store_true")
+    eval_parser.set_defaults(func=cmd_eval)
 
     sub.add_parser("status", help="truth-layer counters, review queue, deprecation check").set_defaults(func=cmd_status)
 

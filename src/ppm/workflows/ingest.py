@@ -28,6 +28,7 @@ from ppm.models import ModelUnavailable, embed_texts, get_extractor
 from ppm.normalise import normalise_elements
 from ppm.registry import Registry, get_registry
 from ppm.schemas import CostPlanExtraction, NormalisedRate, ValidationIssue, ValidationReport
+from ppm.workflows.chunking import index_document_chunks
 
 
 class IngestState(TypedDict, total=False):
@@ -307,6 +308,24 @@ class IngestWorkflow:
         _update_run(state["thread_id"], "completed", document_id=state["document_id"], stats=stats)
         return {"status": "completed", "stats": stats, "error": None}
 
+    def _index_chunks(self, state: IngestState) -> dict:
+        """Chunk + embed the document for cited retrieval (Phase 1). Runs after
+        a successful persist; failures degrade to a warning, never lose the
+        already-written truth-layer rows."""
+        parsed = ParsedDocument.from_state(state["parsed"])
+        stats = dict(state.get("stats") or {})
+        try:
+            written, warning = index_document_chunks(state["document_id"], parsed, self.settings)
+        except Exception as exc:
+            stats["chunk_warning"] = f"chunk write failed: {exc}"
+            _update_run(state["thread_id"], "completed", document_id=state["document_id"], stats=stats)
+            return {"stats": stats}
+        stats["chunks_written"] = written
+        if warning:
+            stats["chunk_warning"] = warning
+        _update_run(state["thread_id"], "completed", document_id=state["document_id"], stats=stats)
+        return {"stats": stats}
+
     def _reject(self, state: IngestState) -> dict:
         db.execute("UPDATE document SET ingest_status = 'reference_only' WHERE document_id = %s",
                    (state.get("document_id"),))
@@ -332,6 +351,9 @@ class IngestWorkflow:
         action = (state.get("review") or {}).get("action", "approve")
         return "reject" if action == "reject" else "normalise"
 
+    def _after_persist(self, state: IngestState) -> str:
+        return "index" if state.get("status") == "completed" else "stop"
+
     # --- assembly ------------------------------------------------------------------
 
     def compile(self, checkpointer=None):
@@ -342,6 +364,7 @@ class IngestWorkflow:
         graph.add_node("human_review", self._human_review)
         graph.add_node("normalise", self._normalise)
         graph.add_node("persist", self._persist)
+        graph.add_node("index_chunks", self._index_chunks)
         graph.add_node("reject", self._reject)
 
         graph.add_edge(START, "load_register")
@@ -350,7 +373,8 @@ class IngestWorkflow:
         graph.add_conditional_edges("validate", self._after_validate, {"review": "human_review", "normalise": "normalise"})
         graph.add_conditional_edges("human_review", self._after_review, {"reject": "reject", "normalise": "normalise"})
         graph.add_edge("normalise", "persist")
-        graph.add_edge("persist", END)
+        graph.add_conditional_edges("persist", self._after_persist, {"index": "index_chunks", "stop": END})
+        graph.add_edge("index_chunks", END)
         graph.add_edge("reject", END)
 
         self._app = graph.compile(checkpointer=checkpointer)

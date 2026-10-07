@@ -29,10 +29,23 @@ def test_sql_with_vector_orders_by_similarity():
     assert bound[0] == [0.1] * 768
 
 
-def test_sql_text_like_fallback_escapes_wildcards():
-    sql, params = build_search_sql(RateQuery(text="50%_x"), has_vector=False, text_like="50%_x")
+def test_sql_text_like_uses_significant_terms():
+    sql, params = build_search_sql(
+        RateQuery(text="what is the rate for curtain wall?", limit=5),
+        has_vector=False,
+        text_like="what is the rate for curtain wall?",
+    )
     assert "r.description ILIKE %s" in sql
-    assert params == ["%50\\%\\_x%", 50]
+    assert "%curtain%" in params and "%wall%" in params
+    assert not any("%what%" == str(p) or "%rate%" == str(p) for p in params)
+    assert "ORDER BY (r.description ILIKE %s)::int" in sql
+
+
+def test_literal_terms_drops_stopwords():
+    from ppm.text import literal_terms
+
+    assert literal_terms("what is the rate for reinforcement bar") == ["reinforcement", "bar"]
+    assert literal_terms("a of to") == []
 
 
 def test_sql_date_range():

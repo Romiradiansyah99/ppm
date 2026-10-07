@@ -6,9 +6,7 @@ are detected; hybrid search returns provenance)."""
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import replace
 
-import pytest
 from langgraph.checkpoint.postgres import PostgresSaver
 
 from ppm import db
@@ -17,11 +15,6 @@ from ppm.models import _StubExtractor
 from ppm.workflows.ingest import IngestWorkflow, interrupted
 from ppm.workflows.retrieval import RateQuery, rate_search
 from tests.conftest import requires_db
-
-
-@pytest.fixture()
-def stub_settings(settings):
-    return replace(settings, provider="stub")
 
 
 @contextmanager
@@ -95,6 +88,11 @@ def test_ingest_alpha_writes_rates_with_provenance(samples, registry, stub_setti
 
     run = db.fetch_one("SELECT status FROM ingest_run WHERE thread_id = %s", (result["thread_id"],))
     assert run["status"] == "completed"
+
+    chunks = db.fetch_all("SELECT * FROM document_chunk ORDER BY chunk_index")
+    assert chunks and all(chunk["section_ref"] for chunk in chunks)
+    assert all(chunk["embedding"] is not None for chunk in chunks)
+    assert result["stats"]["chunks_written"] == len(chunks)
 
 
 @requires_db

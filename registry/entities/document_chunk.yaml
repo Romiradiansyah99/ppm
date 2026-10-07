@@ -1,0 +1,20 @@
+# PPM definition registry - document chunk (Phase 1 infrastructure entity).
+# Plain rows produced by the ingest graph's chunking step; every chunk carries
+# a section_ref back to the source so answers can cite it.
+entity: document_chunk
+table: document_chunk
+tier: A
+registry_version: 1
+status: INFRASTRUCTURE
+owner: platform_owner
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  document_id:     { type: uuid, required: true }
+  chunk_index:     { type: integer, required: true }
+  section_ref:     { type: text, required: true, note: "Sheet!R13-R32 or page 3 (part 2)" }
+  text_content:    { type: text, required: true }
+  token_estimate:  { type: integer, required: false }
+
+enums: {}

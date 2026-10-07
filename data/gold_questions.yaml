@@ -1,0 +1,38 @@
+# Gold question set (plan section 6, Phase 1). In production this grows to 50
+# real office questions; this starter set runs against the synthetic samples.
+#
+# query          - the retrieval query (short and literal-friendly); falls
+#                  back to the question when absent
+# expect_keywords- must appear in the answer
+# expect_source  - at least one retrieved chunk comes from that file
+# expect_no_source - the only correct answer is "No source found."
+- question: "What rate was used for reinforcement bar, cut bend and fix?"
+  query: "reinforcement bar"
+  expect_keywords: ["reinforcement bar"]
+  expect_source: synthetic_alpha
+- question: "What is the rate for the passenger lift?"
+  query: "passenger lift"
+  expect_keywords: ["passenger lift"]
+  expect_source: synthetic_alpha
+- question: "What rate was applied to the curtain wall?"
+  query: "curtain wall"
+  expect_keywords: ["curtain wall"]
+  expect_source: synthetic_alpha
+- question: "What does the bored pile cost per metre?"
+  query: "bored pile"
+  expect_keywords: ["bored pile"]
+  expect_source: synthetic_beta
+- question: "What is the rate for pile testing?"
+  query: "pile testing"
+  expect_keywords: ["pile testing"]
+  expect_source: synthetic_beta
+- question: "How much is the escalator?"
+  query: "escalator"
+  expect_keywords: ["escalator"]
+  expect_source: synthetic_beta
+- question: "What area basis does the gamma plan use?"
+  query: "area basis"
+  expect_keywords: ["area basis"]
+- question: "What is the atomic number of francium?"
+  query: "atomic number of francium"
+  expect_no_source: true

@@ -11,8 +11,8 @@ import yaml
 from ppm.registry import RegistryError, load_registry
 
 
-def test_loads_all_four_phase0_entities(registry):
-    assert set(registry.entities) == {"document", "project", "cost_plan", "benchmark_rate"}
+def test_phase0_entities_present(registry):
+    assert {"document", "project", "cost_plan", "benchmark_rate"} <= set(registry.entities)
 
 
 def test_version_is_content_hash(registry):

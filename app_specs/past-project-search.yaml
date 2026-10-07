@@ -1,0 +1,25 @@
+# The Phase 1 app: past-project search + lessons (plan section 5, app 2).
+# Cited RAG over the document index; read-only; unsourced answers never
+# paraphrased.
+app: past-project-search
+version: 1
+user: UNASSIGNED            # name the weekly user before daily use
+owner: platform_owner
+data_sources: [Document, DocumentChunk]
+permission_rule: requester sees only documents the silo rules permit
+views:
+  - name: ask
+    entity: Document
+    fields: all
+    filters: [project, doc_date]
+    sort: [doc_date desc]
+  - name: sources
+    entity: Document
+    fields: [source_path, doc_date, author, confidentiality_class, ingest_status]
+    filters: [confidentiality_class]
+    sort: [doc_date desc]
+actions: []                 # read-only: survives infosec review
+notifications: []
+memory_scope: private       # question history is per-consultant
+deprecation_condition: no questions asked in 90 consecutive days
+failsafe: answers without a supporting chunk render "No source found."
