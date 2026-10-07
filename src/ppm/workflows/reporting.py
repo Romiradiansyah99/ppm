@@ -92,11 +92,21 @@ class ReportWorkflow:
             "SELECT count(*) AS n FROM benchmark_rate r JOIN cost_plan c ON c.costplan_id = r.costplan_id "
             "WHERE c.project_id = %s", (state["project_id"],)
         )
+        changes = db.fetch_all(
+            "SELECT description, status, cost_impact_idr, time_impact_days FROM change_event "
+            "WHERE project_id = %s ORDER BY created_at DESC LIMIT 20", (state["project_id"],)
+        )
+        risks = db.fetch_all(
+            "SELECT category, description, likelihood, impact, status FROM risk "
+            "WHERE project_id = %s ORDER BY review_date NULLS LAST LIMIT 20", (state["project_id"],)
+        )
         gathered = {
             "project": {"name": project["name"], "sector": project["sector"], "stage": project["stage"],
                         "status": project["status"]},
             "deliverables": deliverables,
             "latest_cost_plan": dict(plan) if plan else None,
+            "changes": changes,
+            "risks": risks,
             "rate_count": rate_count["n"] if rate_count else 0,
         }
         json.dumps(gathered, default=str)  # fail here if not serialisable

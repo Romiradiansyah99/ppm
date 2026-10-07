@@ -1,0 +1,53 @@
+# The Phase 5 app: change/variation and risk (RAID) registers.
+# Creates are open to the team; updates carry approval gates because they
+# move commercial position or close out risk.
+app: registers
+version: 1
+user: UNASSIGNED
+owner: operations_lead
+data_sources: [ChangeEvent, Risk, Project, Person]
+permission_rule: project team only - silo rules apply to every read
+views:
+  - name: changes
+    entity: ChangeEvent
+    fields: all
+    filters: [project_id, status]
+    sort: [created_at desc]
+  - name: risks
+    entity: Risk
+    fields: all
+    filters: [project_id, status, category]
+    sort: [review_date asc]
+actions:
+  - name: change.create
+    writes_to: ChangeEvent
+    operation: insert
+    fields: [project_id, description, cause, cost_impact_idr, time_impact_days, status,
+             instruction_ref, identified_on]
+    required: [project_id, description]
+    approval_gate: none
+  - name: change.update
+    writes_to: ChangeEvent
+    operation: update
+    key_field: change_id
+    fields: [change_id, status, cost_impact_idr, submitted_on, approved_on, instruction_ref]
+    required: [change_id]
+    approval_gate: peer
+  - name: risk.create
+    writes_to: Risk
+    operation: insert
+    fields: [project_id, description, category, likelihood, impact, owner_id, review_date,
+             status, mitigation]
+    required: [project_id, description]
+    approval_gate: none
+  - name: risk.update
+    writes_to: Risk
+    operation: update
+    key_field: risk_id
+    fields: [risk_id, status, likelihood, impact, mitigation, review_date, owner_id]
+    required: [risk_id]
+    approval_gate: owner
+notifications: []
+memory_scope: shared
+deprecation_condition: no register activity in 180 consecutive days
+failsafe: entries without a status render "unknown status"

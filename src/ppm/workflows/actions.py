@@ -294,7 +294,8 @@ class ActionWorkflow:
             return self._fail(state, "approval needs a valid approver_id")
         if self.spec.gate in {"owner", "partner"} and not approver["is_approver"]:
             return self._fail(state, f"{approver['username']} is not an approver (gate '{self.spec.gate}')")
-        if self.spec.gate == "peer" and approver["person_id"] == state["actor_id"] and not approver["is_approver"]:
+        if (self.spec.gate == "peer" and not approver["is_approver"]
+                and str(approver["person_id"]) == str(state["actor_id"])):
             return self._fail(state, "peer approval must come from someone other than the author")
         _update_run(state["thread_id"], "running")
         return {"decision": decision, "status": "decided"}

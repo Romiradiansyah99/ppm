@@ -1,0 +1,30 @@
+# PPM definition registry - change event (plan section 3, entity 6).
+# A variation with commercial impact; updates are peer-gated because pricing
+# changes move money.
+entity: change_event
+table: change_event
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  change_id:        { type: uuid, required: false }
+  project_id:       { type: uuid, required: true }
+  description:      { type: text, required: true }
+  cause:            { type: text, required: false }
+  cost_impact_idr:  { type: bigint, required: false }
+  time_impact_days: { type: integer, required: false }
+  status:           { type: text, required: false }
+  instruction_ref:  { type: text, required: false }
+  identified_on:    { type: date, required: false }
+  submitted_on:     { type: date, required: false }
+  approved_on:      { type: date, required: false }
+
+enums:
+  status:
+    status: GUESS
+    owner: operations_lead
+    values: [identified, priced, submitted, approved, rejected]

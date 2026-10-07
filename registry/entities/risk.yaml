@@ -1,0 +1,33 @@
+# PPM definition registry - risk (RAID entry, plan section 3, entity 7).
+entity: risk
+table: risk
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  risk_id:     { type: uuid, required: false }
+  project_id:  { type: uuid, required: true }
+  category:    { type: text, required: false }
+  description: { type: text, required: true }
+  likelihood:  { type: integer, required: false }
+  impact:      { type: integer, required: false }
+  owner_id:    { type: uuid, required: false }
+  review_date: { type: date, required: false }
+  status:      { type: text, required: false }
+  mitigation:  { type: text, required: false }
+
+enums:
+  category:
+    values: [risk, assumption, issue, dependency]
+  status:
+    values: [open, monitoring, closed, escalated]
+  likelihood:
+    status: GUESS
+    values: ["1", "2", "3", "4", "5"]
+  impact:
+    status: GUESS
+    values: ["1", "2", "3", "4", "5"]

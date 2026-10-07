@@ -442,6 +442,25 @@ class _StubReportDrafter:
                          f"total IDR {plan.get('total_cost_idr') or 'not stated'}")
         else:
             lines.append("- no cost plan on file")
+        lines += ["", "## Change register"]
+        changes = gathered.get("changes") or []
+        if changes:
+            for row in changes:
+                impact = row.get("cost_impact_idr")
+                impact_txt = f"IDR {impact}" if impact else "no cost impact"
+                if row.get("time_impact_days"):
+                    impact_txt += f", {row['time_impact_days']}d time impact"
+                lines.append(f"- {row.get('status')}: {row.get('description')} ({impact_txt})")
+        else:
+            lines.append("- no changes recorded")
+        lines += ["", "## Risk register (RAID)"]
+        risks = gathered.get("risks") or []
+        if risks:
+            for row in risks:
+                lines.append(f"- [{row.get('category')}] {row.get('description')} "
+                             f"(L{row.get('likelihood')}/I{row.get('impact')}, {row.get('status')})")
+        else:
+            lines.append("- no risks recorded")
         lines += [
             "",
             "## Notes",
