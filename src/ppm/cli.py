@@ -475,6 +475,73 @@ def cmd_memory(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from ppm.workflows.reporting import ReportWorkflow
+
+    settings = get_settings()
+
+    if args.report_cmd == "draft":
+        project = db.fetch_one("SELECT * FROM project WHERE lower(name) = lower(%s)", (args.project,))
+        if project is None:
+            known = [row["name"] for row in db.fetch_all("SELECT name FROM project ORDER BY name LIMIT 20")]
+            print(f"error: no project '{args.project}'. Known projects: {known}", file=sys.stderr)
+            return 1
+        actor = _resolve_person(args.user, settings)
+        workflow = ReportWorkflow(settings)
+        with _checkpointer(settings) as checkpointer:
+            workflow.compile(checkpointer)
+            result = workflow.run(actor["person_id"], str(project["project_id"]))
+        if interrupted(result):
+            print(f"report ({project['name']}): draft ready, awaiting sign-off")
+            print(f"  run {result['thread_id']}")
+            for line in (result.get("draft") or "").splitlines()[:6]:
+                print(f"  | {line}")
+            print(f"  show:    ppm report show {result['thread_id']}")
+            print(f"  approve: ppm report approve {result['thread_id']} --user <approver>")
+            return 0
+        print(f"report: {result.get('status')}")
+        if result.get("error"):
+            print(f"  error: {result['error']}")
+            return 1
+        return 0
+
+    run = db.fetch_one("SELECT * FROM report_run WHERE run_id = %s OR thread_id = %s", (args.run_id, args.run_id))
+    if run is None:
+        print(f"error: no report run '{args.run_id}'", file=sys.stderr)
+        return 1
+
+    if args.report_cmd == "show":
+        project = db.fetch_one("SELECT name FROM project WHERE project_id = %s", (run["project_id"],))
+        print(f"report {run['run_id']}  status={run['status']}  project={project['name'] if project else '?'}")
+        if run.get("draft_path"):
+            print(f"exported: {run['draft_path']}")
+        if run.get("note"):
+            print(f"note: {run['note']}")
+        print()
+        print(run.get("draft") or "(no draft text)")
+        return 0
+
+    if run["status"] != "awaiting_signoff":
+        print(f"error: report is '{run['status']}', not awaiting sign-off", file=sys.stderr)
+        return 1
+    approver = _resolve_person(args.user, settings)
+    workflow = ReportWorkflow(settings)
+    with _checkpointer(settings) as checkpointer:
+        workflow.compile(checkpointer)
+        result = workflow.resume(run["thread_id"], {
+            "action": "approve" if args.report_cmd == "approve" else "reject",
+            "approver_id": approver["person_id"],
+            "note": args.note,
+        })
+    print(f"report: {result.get('status')} (by {approver['username']})")
+    if result.get("error"):
+        print(f"  error: {result['error']}")
+        return 1
+    if result.get("draft_path"):
+        print(f"  exported: {result['draft_path']}")
+    return 0
+
+
 def cmd_silos(args: argparse.Namespace) -> int:
     """Report the Phase 3 silo machinery for the infosec review."""
     settings = get_settings()
@@ -677,6 +744,20 @@ def build_parser() -> argparse.ArgumentParser:
     silos_sub = silos.add_subparsers(dest="silos_cmd", required=True)
     silos_sub.add_parser("check")
     silos.set_defaults(func=cmd_silos)
+
+    report = sub.add_parser("report", help="monthly report drafting with a sign-off gate")
+    report_sub = report.add_subparsers(dest="report_cmd", required=True)
+    report_draft = report_sub.add_parser("draft")
+    report_draft.add_argument("--project", required=True, help="project name (exact)")
+    report_draft.add_argument("--user")
+    report_show = report_sub.add_parser("show")
+    report_show.add_argument("run_id")
+    for command in ("approve", "reject"):
+        entry = report_sub.add_parser(command)
+        entry.add_argument("run_id")
+        entry.add_argument("--user", help="approver username (default: PPM_USER_LABEL)")
+        entry.add_argument("--note")
+    report.set_defaults(func=cmd_report)
 
     registry = sub.add_parser("registry", help="definition registry utilities")
     registry_sub = registry.add_subparsers(dest="registry_cmd", required=True)

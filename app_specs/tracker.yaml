@@ -1,0 +1,37 @@
+# The Phase 4 app: deliverable / stage-gate tracker, plus report drafting
+# with a mandatory sign-off gate (plan section 5 apps 3 and 4).
+app: tracker
+version: 1
+user: UNASSIGNED
+owner: operations_lead
+data_sources: [Deliverable, Project, Person]
+permission_rule: project team only - silo rules apply to every read
+views:
+  - name: deliverables
+    entity: Deliverable
+    fields: all
+    filters: [project_id, status, type]
+    sort: [due_date asc]
+  - name: overdue
+    entity: Deliverable
+    fields: all
+    filters: [status, due_date]
+    sort: [due_date asc]
+actions:
+  - name: deliverable.create
+    writes_to: Deliverable
+    operation: insert
+    fields: [project_id, type, due_date, status, reviewer_id, document_ref]
+    required: [project_id, type]
+    approval_gate: none
+  - name: deliverable.update
+    writes_to: Deliverable
+    operation: update
+    key_field: deliverable_id
+    fields: [deliverable_id, status, due_date, reviewer_id, document_ref]
+    required: [deliverable_id]
+    approval_gate: none
+notifications: []
+memory_scope: shared
+deprecation_condition: no tracker activity in 180 consecutive days
+failsafe: deliverables without a due date render "no date"

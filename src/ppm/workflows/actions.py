@@ -157,10 +157,15 @@ def log_weight_change_inline(conn, lesson_id: str, old_weight: float | None, new
     )
 
 
+def _deliverable_create(conn, state: dict, spec: ActionSpec) -> dict:
+    return {"author_id": state["actor_id"]}
+
+
 HOOKS: dict[str, Callable] = {
     "lesson.submit": _lesson_submit,
     "lesson.promote": _lesson_promote,
     "lesson.remove": _lesson_remove,
+    "deliverable.create": _deliverable_create,
 }
 
 

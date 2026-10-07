@@ -1,0 +1,31 @@
+# PPM definition registry - deliverable (plan section 3, entity 5).
+# A document owed to a client or internally; the tracker replaces the
+# two-week-lookahead spreadsheet.
+entity: deliverable
+table: deliverable
+tier: A
+registry_version: 1
+status: DRAFT_UNVERIFIED
+owner: operations_lead
+signed_by: null
+updated: 2026-10-06
+
+fields:
+  deliverable_id: { type: uuid, required: false }
+  project_id:     { type: uuid, required: true }
+  type:           { type: text, required: true }
+  due_date:       { type: date, required: false }
+  status:         { type: text, required: false }
+  author_id:      { type: uuid, required: false }
+  reviewer_id:    { type: uuid, required: false }
+  document_ref:   { type: text, required: false }
+
+enums:
+  type:
+    status: GUESS
+    owner: operations_lead
+    values: [cost_plan, boq, tender_report, monthly_report, change_register,
+             risk_register, cashflow, final_account, stage_gate_paper]
+  status:
+    status: GUESS
+    values: [open, in_progress, submitted, reviewed, issued, closed]

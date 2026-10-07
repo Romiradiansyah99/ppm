@@ -79,3 +79,20 @@ def resolve_pending(actions, settings, registry, action_name: str, thread_id: st
     workflow = ActionWorkflow(actions[action_name], registry, settings)
     with _compiled(workflow, settings):
         return workflow.resume(thread_id, decision)
+
+
+def draft_report(settings, project_id: str, actor_id: str) -> dict:
+    """Run the report drafter; it pauses at the sign-off interrupt."""
+    from ppm.workflows.reporting import ReportWorkflow
+
+    workflow = ReportWorkflow(settings)
+    with _compiled(workflow, settings):
+        return workflow.run(actor_id, project_id)
+
+
+def resolve_report(settings, thread_id: str, decision: dict) -> dict:
+    from ppm.workflows.reporting import ReportWorkflow
+
+    workflow = ReportWorkflow(settings)
+    with _compiled(workflow, settings):
+        return workflow.resume(thread_id, decision)

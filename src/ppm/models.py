@@ -405,6 +405,91 @@ def get_answer_generator(settings: Settings) -> AnswerGenerator:
 
 
 # ---------------------------------------------------------------------------
+# Report drafting (Phase 4)
+# ---------------------------------------------------------------------------
+
+class ReportDrafter(Protocol):
+    def draft(self, gathered: dict, meta: dict) -> str: ...
+
+
+_RECORD_RULES = """Write a concise monthly cost and progress report in markdown
+using ONLY the data provided. Never invent numbers, dates, events or names.
+Where the data is missing, say so explicitly. No client-identifying content."""
+
+
+class _StubReportDrafter:
+    """Deterministic dev-only drafter: renders the gathered data as markdown."""
+
+    def draft(self, gathered: dict, meta: dict) -> str:
+        project = gathered.get("project") or {}
+        lines = [
+            f"# Cost & progress report - {project.get('name', 'unknown project')}",
+            f"_{meta.get('generated_at', '')} | run {meta.get('run_id', '')} | "
+            f"registry {meta.get('registry_version', '')} | STUB draft (dev-only)_",
+            "",
+            "## Deliverables",
+        ]
+        deliverables = gathered.get("deliverables") or []
+        if deliverables:
+            for row in deliverables:
+                lines.append(f"- {row.get('type')} - {row.get('status')} - due {row.get('due_date') or 'no date'}")
+        else:
+            lines.append("- none tracked")
+        plan = gathered.get("latest_cost_plan")
+        lines += ["", "## Latest cost position"]
+        if plan:
+            lines.append(f"- stage {plan.get('stage')} dated {plan.get('plan_date')}: "
+                         f"total IDR {plan.get('total_cost_idr') or 'not stated'}")
+        else:
+            lines.append("- no cost plan on file")
+        lines += [
+            "",
+            "## Notes",
+            f"- rates indexed for this project: {gathered.get('rate_count', 0)}",
+            "- draft generated from PPM data only; a named approver must sign off "
+            "before any export",
+        ]
+        return "\n".join(lines)
+
+
+class _LLMReportDrafter:
+    def __init__(self, chat: object) -> None:
+        self._chat = chat
+
+    def draft(self, gathered: dict, meta: dict) -> str:
+        prompt = (
+            f"{_RECORD_RULES}\n\nContext: {json.dumps(meta, default=str)}\n\n"
+            f"Data:\n{json.dumps(gathered, indent=2, default=str)}"
+        )
+        try:
+            response = self._chat.invoke(prompt)
+        except Exception as exc:
+            raise ModelUnavailable(f"report drafting failed: {exc}") from exc
+        content = response.content
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in content)
+        return str(content).strip() or "Report drafting returned nothing."
+
+
+def get_report_drafter(settings: Settings) -> ReportDrafter:
+    if settings.provider == "stub":
+        return _StubReportDrafter()
+    if settings.provider == "ollama":
+        from langchain_ollama import ChatOllama
+
+        return _LLMReportDrafter(ChatOllama(model=settings.chat_model, base_url=settings.ollama_host, temperature=0))
+    if settings.provider == "api":
+        if not settings.api_base or not settings.api_key:
+            raise ModelUnavailable("PPM_API_BASE and PPM_API_KEY are required for provider=api")
+        from langchain_openai import ChatOpenAI
+
+        return _LLMReportDrafter(
+            ChatOpenAI(model=settings.chat_model, base_url=settings.api_base, api_key=settings.api_key, temperature=0)
+        )
+    raise ModelUnavailable(f"unknown provider '{settings.provider}'")
+
+
+# ---------------------------------------------------------------------------
 # Factories and diagnostics
 # ---------------------------------------------------------------------------
 
