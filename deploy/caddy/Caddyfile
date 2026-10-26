@@ -1,0 +1,17 @@
+{$APP_DOMAIN:localhost} {
+    encode gzip zstd
+    request_body {
+        max_size 25MB
+    }
+    reverse_proxy web:8501
+    header {
+        -Server
+        Referrer-Policy "no-referrer"
+        X-Content-Type-Options "nosniff"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+    log {
+        output stdout
+        format console
+    }
+}

@@ -1,0 +1,45 @@
+version: 1
+status: DRAFT
+owner: founder
+signed_by: null
+updated: 2026-10-18
+
+stages:
+  - preparation
+  - design
+  - preconstruction
+  - procurement
+  - construction
+  - closeout
+  - governance
+  - others
+  - unclassified
+
+categories:
+  - pep
+  - brief
+  - cost_plan
+  - cost_report
+  - cash_flow
+  - value_engineering
+  - risk
+  - change
+  - issues
+  - procurement
+  - tender
+  - meeting
+  - report
+  - checklist
+  - register
+  - dashboard
+  - quality
+  - handover
+  - lessons
+  - other
+
+formats:
+  - xlsx
+  - docx
+  - doc
+  - pdf
+  - pptx

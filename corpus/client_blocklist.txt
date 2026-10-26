@@ -1,0 +1,14 @@
+# Client and project names that must never reach an embedding.
+# Case-insensitive, whole-word match. One term per line; # starts a comment.
+Barclays
+Chevron
+Julius Bar
+Citi
+DC2B
+kaiyun
+kai yun
+MBS
+Abbeyfield
+GDC
+NETS
+CGK11

@@ -1,0 +1,200 @@
+name: ppm
+
+x-ppm-env: &ppm-env
+  PPM_DSN: postgresql://ppm:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/ppm2
+  PPM_DB_POOL_MAX: ${PPM_DB_POOL_MAX:-10}
+  PPM_RESIDENCY: ${PPM_RESIDENCY:-api_approved}
+  PPM_OLLAMA_HOST: ${PPM_OLLAMA_HOST:-http://ollama:11434}
+  PPM_CHAT_MODEL: ${PPM_CHAT_MODEL:-qwen2.5:3b}
+  PPM_EMBED_MODEL: ${PPM_EMBED_MODEL:-nomic-embed-text}
+  PPM_EMBED_DIM: ${PPM_EMBED_DIM:-768}
+  PPM_NUM_GPU: ${PPM_NUM_GPU:-0}
+  PPM_NUM_CTX: ${PPM_NUM_CTX:-4096}
+  PPM_TOP_K: ${PPM_TOP_K:-4}
+  PPM_MIN_SIMILARITY: ${PPM_MIN_SIMILARITY:-0.25}
+  PPM_LLM_API_BASE: ${PPM_LLM_API_BASE:-}
+  PPM_LLM_API_KEY: ${PPM_LLM_API_KEY:-}
+  PPM_LLM_MODEL: ${PPM_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+  PPM_LLM_TEMPERATURE: ${PPM_LLM_TEMPERATURE:-0}
+  PPM_ANALYST_MAX_PARALLEL: ${PPM_ANALYST_MAX_PARALLEL:-4}
+  PPM_ANALYST_TASK_TIMEOUT: ${PPM_ANALYST_TASK_TIMEOUT:-120}
+  PPM_ANALYST_ALLOW_CODE_EXECUTION: ${PPM_ANALYST_ALLOW_CODE_EXECUTION:-true}
+  PPM_ANALYST_EGRESS_ACK: ${PPM_ANALYST_EGRESS_ACK:-}
+  PPM_DOCUMENTS_DIR: /app/exports/documents
+  PPM_INCOMING_DIR: /app/incoming
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ppm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ppm2
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ppm -d ppm2"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+
+  mcp-analyst:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    restart: unless-stopped
+    environment:
+      <<: *ppm-env
+      PPM_ACCESS_LEVEL: baseline
+      PPM_MCP_HOST: 0.0.0.0
+      PPM_MCP_PORT: "8765"
+      PPM_TOOL_SECRET: ${PPM_TOOL_SECRET:?set PPM_TOOL_SECRET in .env}
+    volumes:
+      - ppm_exports:/app/exports
+      - ppm_incoming:/app/incoming
+    expose: ["8765"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+
+  mcp-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    restart: unless-stopped
+    environment:
+      <<: *ppm-env
+      PPM_ACCESS_LEVEL: all
+      PPM_MCP_HOST: 0.0.0.0
+      PPM_MCP_PORT: "8766"
+      PPM_TOOL_SECRET: ${PPM_TOOL_SECRET:?set PPM_TOOL_SECRET in .env}
+    volumes:
+      - ppm_exports:/app/exports
+      - ppm_incoming:/app/incoming
+    expose: ["8766"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+
+  hermes-analyst:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:0.21.5}
+    restart: unless-stopped
+    command: gateway run
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${PPM_HERMES_ANALYST_KEY:?set PPM_HERMES_ANALYST_KEY in .env}
+      API_SERVER_CORS_ORIGINS: ""
+      PPM_LLM_API_BASE: ${PPM_LLM_API_BASE:-}
+      PPM_LLM_API_KEY: ${PPM_LLM_API_KEY:-}
+      PPM_LLM_MODEL: ${PPM_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      HERMES_HOME: /opt/data
+    volumes:
+      - ./deploy/hermes/analyst:/opt/data
+      - ./deploy/hermes/SOUL.md:/opt/data/SOUL.md:ro
+    expose: ["8642"]
+    depends_on: [mcp-analyst]
+    networks: [backend]
+
+  hermes-admin:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:0.21.5}
+    restart: unless-stopped
+    command: gateway run
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${PPM_HERMES_ADMIN_KEY:?set PPM_HERMES_ADMIN_KEY in .env}
+      API_SERVER_CORS_ORIGINS: ""
+      PPM_LLM_API_BASE: ${PPM_LLM_API_BASE:-}
+      PPM_LLM_API_KEY: ${PPM_LLM_API_KEY:-}
+      PPM_LLM_MODEL: ${PPM_LLM_MODEL:-deepseek/deepseek-v4.1-flash}
+      HERMES_HOME: /opt/data
+    volumes:
+      - ./deploy/hermes/admin:/opt/data
+      - ./deploy/hermes/SOUL.md:/opt/data/SOUL.md:ro
+    expose: ["8642"]
+    depends_on: [mcp-admin]
+    networks: [backend]
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *ppm-env
+      PPM_PUBLIC_MODE: ${PPM_PUBLIC_MODE:-1}
+      PPM_SESSION_SECRET: ${PPM_SESSION_SECRET:?set PPM_SESSION_SECRET in .env}
+      PPM_TOOL_SECRET: ${PPM_TOOL_SECRET:?set PPM_TOOL_SECRET in .env}
+      PPM_COOKIE_SECURE: ${PPM_COOKIE_SECURE:-1}
+      PPM_SESSION_DAYS: ${PPM_SESSION_DAYS:-30}
+      PPM_DAILY_MESSAGE_LIMIT: ${PPM_DAILY_MESSAGE_LIMIT:-50}
+      PPM_MAX_INPUT_CHARS: ${PPM_MAX_INPUT_CHARS:-6000}
+      PPM_HERMES_ANALYST_URL: http://hermes-analyst:8642
+      PPM_HERMES_ANALYST_KEY: ${PPM_HERMES_ANALYST_KEY:?set PPM_HERMES_ANALYST_KEY in .env}
+      PPM_HERMES_ADMIN_URL: http://hermes-admin:8642
+      PPM_HERMES_ADMIN_KEY: ${PPM_HERMES_ADMIN_KEY:?set PPM_HERMES_ADMIN_KEY in .env}
+      PPM_HERMES_MODEL: ${PPM_HERMES_MODEL:-hermes-agent}
+      PPM_HERMES_TIMEOUT: ${PPM_HERMES_TIMEOUT:-180}
+    volumes:
+      - ppm_exports:/app/exports
+      - ppm_incoming:/app/incoming
+    ports:
+      - "127.0.0.1:${PPM_WEB_PORT:-8501}:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+      mcp-analyst:
+        condition: service_started
+      mcp-admin:
+        condition: service_started
+      hermes-analyst:
+        condition: service_started
+      hermes-admin:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    networks: [backend]
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["models"]
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    expose: ["11434"]
+    networks: [backend]
+
+volumes:
+  pgdata:
+  ppm_exports:
+  ppm_incoming:
+  caddy_data:
+  caddy_config:
+  ollama_data:
+
+networks:
+  backend:
+    driver: bridge

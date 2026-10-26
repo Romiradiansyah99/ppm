@@ -1,0 +1,59 @@
+version: 1
+cases:
+  - id: top_component
+    question: Komponen biaya apa yang paling besar lintas proyek benchmark?
+    expected:
+      columns_any: [description, line_total]
+      min_rows: 5
+      contains_any: ["Hard Construction", "MEP Works"]
+  - id: top_project
+    question: Proyek benchmark mana yang total cost-nya paling tinggi?
+    expected:
+      columns_any: [project, total_cost, name]
+      min_rows: 1
+      contains_any: ["Benchmark A - Project 2"]
+  - id: cost_per_m2
+    question: Berapa cost per m2 untuk setiap proyek benchmark?
+    expected:
+      columns_any: [project, rate, gfa_m2]
+      min_rows: 5
+      contains_any: ["Benchmark"]
+  - id: component_by_project
+    question: Berapa total biaya per komponen untuk tiap proyek?
+    expected:
+      columns_any: [project, description, line_total]
+      min_rows: 10
+      contains_any: ["Builder's Works", "Professional Fees"]
+  - id: top_ten
+    question: Tampilkan sepuluh komponen biaya terbesar beserta rate per m2-nya.
+    expected:
+      columns_any: [project, description, line_total, rate]
+      min_rows: 10
+  - id: currency_split
+    question: Bagaimana perbandingan total biaya proyek SGD dan USD?
+    expected:
+      columns_any: [currency, total_cost, project]
+      min_rows: 2
+      contains_any: [SGD, USD]
+  - id: project_count
+    question: Berapa jumlah proyek benchmark yang ada di data?
+    expected:
+      min_rows: 1
+      contains_any: ["10", "12"]
+  - id: average_rate
+    question: Berapa rata-rata cost per m2 per komponen di semua proyek?
+    expected:
+      columns_any: [description, rate]
+      min_rows: 3
+  - id: risk_top
+    question: Risiko mana yang skornya paling tinggi?
+    expected:
+      columns_any: [description, score, risk_ref]
+      min_rows: 1
+      contains_any: ["20"]
+  - id: change_impact
+    question: Change event mana yang punya cost impact paling besar?
+    expected:
+      columns_any: [description, cost_impact, change_ref]
+      min_rows: 1
+      contains_any: ["CC002", "5000"]

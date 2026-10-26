@@ -1,0 +1,17 @@
+app: template-finder
+version: 1
+user: "<nama user>"
+owner: "<nama owner>"
+data_sources: [Template, Document]
+permission_rule: internal_corpus_only
+views:
+  - name: templates
+    entity: Template
+    fields: all
+    filters: [stage, category, format, source_collection, text]
+    sort: [stage, code]
+actions: []
+notifications: []
+memory_scope: private
+deprecation_condition: no searches in 90 consecutive days
+failsafe: rows without code or stage render as "unclassified" and remain openable

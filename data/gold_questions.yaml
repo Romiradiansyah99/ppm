@@ -1,0 +1,53 @@
+version: 1
+questions:
+  - question: Template apa yang dipakai untuk menyusun cost plan?
+    expect_path: Cost Plan
+  - question: Di mana template risk register?
+    expect_path: Risk Register
+  - question: Template untuk monthly cost report?
+    expect_path: Monthly Cost Report
+  - question: Template change control register?
+    expect_path: Change Control
+  - question: Template practical completion?
+    expect_path: Practical Completion
+  - question: Template defect register?
+    expect_path: Defect
+  - question: Template project execution plan (PEP)?
+    expect_path: PEP
+  - question: Template procurement report?
+    expect_path: Procurement Report
+  - question: Template pre-qualification questionnaire?
+    expect_path: Pre-Qualification
+  - question: Template project cash flow?
+    expect_path: Cash Flow
+  - question: Template daily construction report?
+    expect_path: Daily Construction Report
+  - question: Template inspection and test plan?
+    expect_path: Inspection and Test Plan
+  - question: Template non-conformance report?
+    expect_path: NCR
+  - question: Template handover checklist?
+    expect_path: Handover
+  - question: Template agenda site progress meeting?
+    expect_path: Site Progress Meeting
+  - question: Template value engineering assessment?
+    expect_path: Value Engineering
+  - question: Template project brief?
+    expect_path: Project Brief
+  - question: Template stakeholder analysis?
+    expect_path: Stakeholder
+  - question: Template lessons learnt?
+    expect_path: Lessons
+  - question: Template monthly project dashboard?
+    expect_path: Dashboard
+
+  - question: Berapa harga besi beton per ton hari ini?
+    expect_refusal: true
+  - question: Siapa pemenang tender proyek MRT fase 3?
+    expect_refusal: true
+  - question: Bagaimana cara menghitung pajak penghasilan badan?
+    expect_refusal: true
+  - question: Apa rekomendasi saham minggu ini?
+    expect_refusal: true
+  - question: Berapa gaji project manager di Singapura?
+    expect_refusal: true

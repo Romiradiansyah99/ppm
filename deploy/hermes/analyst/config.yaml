@@ -1,0 +1,57 @@
+# Baseline/public Hermes instance. Never expose its port to the internet.
+model:
+  provider: custom
+  model: ${PPM_LLM_MODEL}
+  base_url: ${PPM_LLM_API_BASE}
+  api_key: ${PPM_LLM_API_KEY}
+
+agent:
+  max_turns: 12
+  disabled_toolsets:
+    - web
+    - search
+    - terminal
+    - file
+    - browser
+    - vision
+    - image_gen
+    - tts
+    - code_execution
+    - delegation
+    - cronjob
+    - messaging
+    - skills
+    - session_search
+    - memory
+    - clarify
+
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+
+approvals:
+  mode: smart
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+
+gateway:
+  api_server:
+    max_concurrent_runs: 4
+
+mcp_servers:
+  ppm:
+    url: http://mcp-analyst:8765/mcp
+    trust: full
+    tools:
+      include:
+        - schema_catalog
+        - sql_query
+        - document_search
+        - plan_and_run
+        - find_templates
+        - create_document
+        - remember_preference
+        - corpus_stats
+      prompts: false
+      resources: false

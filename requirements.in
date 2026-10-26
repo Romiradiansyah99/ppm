@@ -1,0 +1,17 @@
+psycopg[binary,pool]
+pgvector
+pydantic
+PyYAML
+python-dotenv
+openpyxl
+pdfplumber
+python-docx
+python-pptx
+matplotlib
+httpx
+streamlit
+extra-streamlit-components
+mcp>=1.9,<2
+
+# dev
+pytest

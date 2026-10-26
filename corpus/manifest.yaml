@@ -1,0 +1,94 @@
+version: 1
+base_dir: "D:/01. Project/01. Active/07. PPM/01. Build"
+
+# Folders that duplicate another root and must never be walked twice.
+skip_paths:
+  - "00. Template T&T/IDPM Templates"
+  - "00. Template T&T/OneDrive_2026-08-22"
+
+# Patterns are matched against the path relative to base_dir.
+exclude:
+  - "**/~$*"
+  - "**/*.zip"
+  - "**/.DS_Store"
+  - "**/Thumbs.db"
+
+roots:
+  - collection: idpm
+    path: "IDPM Templates"
+    licence: office_authored
+
+  - collection: ttpm_flat
+    path: "00. Template T&T/PM/PM"
+    licence: office_authored
+    exclude:
+      - "03 PM Templates 2020/**"
+      - "IDPM Templates/**"
+
+  - collection: ttpm_2020
+    path: "00. Template T&T/PM/PM/03 PM Templates 2020"
+    licence: office_authored
+
+  - collection: cm
+    path: "00. Template T&T/CM/CM"
+    licence: office_authored
+
+  - collection: idcm
+    path: "00. Template T&T/OneDrive_2026-08-22 (1)/IDCM Templates"
+    licence: office_authored
+
+  - collection: supervision
+    path: "00. Template T&T/OneDrive_2026-08-22 (2)/Construction Supervision"
+    licence: office_authored
+
+  - collection: mom
+    path: "00. Template T&T/MOM"
+    licence: office_authored
+
+# Per-file corrections. `index: false` keeps the file in the catalog but never
+# chunks or embeds it. `is_template: false` keeps it in the document corpus
+# (useful for Ask) without listing it as a template.
+overrides:
+  - match: "**/0 - Asia PM CM Procedures Manual.pdf"
+    collection: procedures
+    licence: office_authored
+    index: true
+    is_template: false
+    stage: unclassified
+
+  - match: "**/RICS Guidance Note - Procurement Strategy.pdf"
+    licence: third_party_reference
+    index: false
+    is_template: false
+
+  - match: "**/2020RIBAPlanofWork*.pdf"
+    licence: third_party_reference
+    index: false
+    is_template: false
+
+  - match: "**/RICS+Damages+for+delay+to+completion.pdf"
+    licence: third_party_reference
+    index: false
+    is_template: false
+
+  - match: "**/Liquidated Damages Explained*.pdf"
+    licence: third_party_reference
+    index: false
+    is_template: false
+
+  - match: "**/HK govt C-2003-04-0-1 - LD calc.pdf"
+    licence: third_party_reference
+    index: false
+    is_template: false
+
+  - match: "**/TT_Service Excellence_KeyDocuments1.pptx"
+    is_template: false
+
+  - match: "**/MOM/*.docx"
+    is_template: false
+    stage: construction
+
+  # Client-specific artefact: keep it as a reference, never as a template.
+  - match: "**/20200615 NETS RACI Matrix.xlsx"
+    is_template: false
+    index: false
