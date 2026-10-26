@@ -6,8 +6,8 @@ import html
 import json
 import os
 import sys
-import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -80,7 +80,7 @@ def _set_cookie(manager, token: str) -> None:
         manager.set(
             "ppm_session",
             token,
-            expires_at=time.time() + settings.session_days * 86400,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.session_days),
             secure=settings.cookie_secure,
             same_site="lax",
         )
